@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Booster Club Concessions</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f3f1ec;
+  --card: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink2: #52514e;
+  --muted: #7a7973;
+  --line: #e1dfd8;
+  --grid: #e7e5de;
+  --accent: #1d4f91;
+  --accent-ink: #ffffff;
+  --accent-soft: #e4edf8;
+  --danger: #b3261e;
+  --s1: #2a78d6;   /* revenue / single series */
+  --s2: #eb6834;   /* profit */
+  --tile: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #121211;
+    --card: #1a1a19;
+    --ink: #ffffff;
+    --ink2: #c3c2b7;
+    --muted: #8f8e85;
+    --line: #2f2f2c;
+    --grid: #2a2a27;
+    --accent: #2b6cc4;
+    --accent-soft: #1f2d42;
+    --danger: #f2877f;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --tile: #222220;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; touch-action: manipulation; }
+button { -webkit-tap-highlight-color: transparent; }
+.local-only { display: none; }
+body.local .local-only { display: block; }
+body.local .server-only { display: none; }
+body { margin: 0; font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3 { margin: 0; line-height: 1.2; }
+h2 { font-size: 20px; }
+h3 { font-size: 16px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.right { text-align: right; }
+.num { font-variant-numeric: tabular-nums; }
+
+header { background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20; padding-top: env(safe-area-inset-top); }
+.bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; flex-wrap: wrap; max-width: 1200px; margin: 0 auto; }
+.brand { font-weight: 700; font-size: 17px; letter-spacing: .2px; }
+.brand span { color: var(--muted); font-weight: 500; }
+.evpill { margin-left: auto; border: 1px solid var(--line); background: var(--accent-soft); border-radius: 999px; padding: 7px 14px; cursor: pointer; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evpill.none { background: transparent; color: var(--ink2); border-style: dashed; }
+nav { display: flex; gap: 4px; padding: 0 12px; max-width: 1200px; margin: 0 auto; overflow-x: auto; }
+nav button { background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; cursor: pointer; font-weight: 600; color: var(--ink2); white-space: nowrap; }
+nav button[aria-selected=true] { color: var(--accent); border-color: var(--accent); }
+main { max-width: 1200px; margin: 0 auto; padding: 16px 16px 110px; }
+section[hidden] { display: none; }
+
+.btn { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 9px 14px; cursor: pointer; min-height: 40px; font-weight: 600; }
+.btn:hover { border-color: var(--muted); }
+a.btn { color: inherit; text-decoration: none; display: inline-flex; align-items: center; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.danger, a.btn.danger { color: var(--danger); }
+a.btn.primary { color: var(--accent-ink); }
+.btn.sm { padding: 5px 10px; min-height: 32px; font-size: 14px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spacer { flex: 1; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+.banner { background: var(--accent-soft); border: 1px dashed var(--accent); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+/* register */
+.reg { display: grid; grid-template-columns: 1fr 360px; gap: 16px; align-items: start; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.chip { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 7px 14px; cursor: pointer; font-weight: 600; font-size: 14px; }
+.chip[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.tile { background: var(--tile); border: 1px solid var(--line); border-radius: 14px; padding: 12px; text-align: left; cursor: pointer; min-height: 92px; display: flex; flex-direction: column; justify-content: space-between; position: relative; touch-action: manipulation; }
+.tile:active { transform: scale(.97); }
+.tile .nm { font-weight: 700; font-size: 16px; }
+.tile .pr { font-size: 20px; font-weight: 700; color: var(--accent); }
+.tile .st { font-size: 12px; color: var(--muted); }
+.tile .st.low { color: var(--danger); font-weight: 700; }
+.tile .qty { position: absolute; top: 8px; right: 8px; background: var(--accent); color: var(--accent-ink); border-radius: 999px; min-width: 26px; height: 26px; display: grid; place-items: center; font-weight: 700; font-size: 14px; padding: 0 6px; }
+.cart { position: sticky; top: 112px; max-height: calc(100vh - 124px); overflow-y: auto; }
+.cart h2 { margin-bottom: 8px; }
+.line { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.stepper { display: flex; align-items: center; gap: 6px; }
+.stepper button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); font-size: 18px; cursor: pointer; line-height: 1; }
+.total { display: flex; justify-content: space-between; font-size: 26px; font-weight: 800; margin: 12px 0; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+.seg button { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 10px 6px; font-weight: 700; cursor: pointer; }
+.seg button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.tender { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.change { font-size: 20px; font-weight: 800; margin: 6px 0 10px; }
+.change.bad { color: var(--danger); }
+.charge { width: 100%; font-size: 20px; padding: 14px; border-radius: 12px; }
+.mobilebar { display: none; }
+
+/* tables */
+.tablewrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); background: var(--card); position: sticky; top: 0; }
+th.r, td.r { text-align: right; }
+tr:last-child td { border-bottom: 0; }
+tr.archived td { opacity: .5; }
+.low-flag { color: var(--danger); font-weight: 700; }
+.badge { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 700; }
+
+/* forms */
+dialog { border: 0; border-radius: 16px; padding: 0; width: min(460px, 94vw); background: var(--card); color: var(--ink); box-shadow: 0 10px 40px #0006; }
+dialog::backdrop { background: #0007; }
+dialog form { padding: 20px; display: grid; gap: 12px; }
+label { display: grid; gap: 4px; font-weight: 600; font-size: 14px; }
+label .hint { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+input, select, textarea { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 9px 10px; min-height: 40px; width: 100%; }
+input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.err { color: var(--danger); font-size: 14px; min-height: 18px; }
+
+/* reports */
+.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-bottom: 14px; }
+.filters label { min-width: 150px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.kpi .k { font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+.kpi .v { font-size: 26px; font-weight: 800; margin-top: 2px; }
+.kpi .s { font-size: 12.5px; color: var(--ink2); margin-top: 2px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.chart h3 { margin-bottom: 2px; }
+.chart .sub { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+svg.c { width: 100%; height: auto; display: block; overflow: visible; }
+svg text { font: 11px system-ui, sans-serif; fill: var(--ink2); }
+svg .t-muted { fill: var(--muted); }
+svg .grid { stroke: var(--grid); stroke-width: 1; }
+svg .axis { stroke: var(--line); stroke-width: 1; }
+svg .guide { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
+.s1 { fill: var(--s1); }
+.s2 { fill: var(--s2); }
+.legend { display: flex; gap: 14px; font-size: 13px; color: var(--ink2); margin-bottom: 6px; }
+.legend .s1 { background: var(--s1); } .legend .s2 { background: var(--s2); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.hit { fill: transparent; }
+.hit:hover { fill: color-mix(in srgb, var(--ink) 6%, transparent); }
+#tip { position: fixed; z-index: 100; pointer-events: none; background: var(--ink); color: var(--bg); padding: 6px 10px; border-radius: 8px; font-size: 13px; display: none; max-width: 260px; box-shadow: 0 4px 14px #0004; }
+#tip b { font-weight: 700; }
+details.tbl { margin-top: 8px; font-size: 13px; }
+details.tbl summary { cursor: pointer; color: var(--accent); }
+details.tbl table { font-size: 13px; margin-top: 6px; }
+.insights { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.quad-help { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin-top: 10px; font-size: 13px; color: var(--ink2); }
+.spark { vertical-align: middle; }
+.spark polyline { fill: none; stroke: var(--s1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.spark circle { fill: var(--s1); stroke: var(--card); stroke-width: 2; }
+.bar-mini { height: 8px; border-radius: 4px; background: var(--s1); }
+.empty { text-align: center; padding: 40px 16px; color: var(--ink2); }
+.empty .btn { margin: 6px; }
+#toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 12px; display: none; z-index: 120; font-weight: 600; max-width: 92vw; text-align: center; }
+
+@media (max-width: 960px) { .reg { grid-template-columns: 1fr 320px; } }
+@media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+@media (max-width: 700px) {
+  .reg { grid-template-columns: 1fr; }
+  .cart { position: static; max-height: none; overflow: visible; }
+  .evpill { margin-left: 0; }
+  .mobilebar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--accent); color: var(--accent-ink); padding: 14px 18px calc(14px + env(safe-area-inset-bottom)); font-weight: 800; font-size: 18px; justify-content: space-between; cursor: pointer; border: 0; width: 100%; }
+  #toast { bottom: 90px; }
+}
+@media print { header, nav, .filters, .btn, .mobilebar { display: none !important; } body { background: #fff; } }
+</style>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Concessions">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1d4f91">
+<script src="engine.js"></script>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">Preston Booster Club <span>· Concessions</span></div>
+    <button class="evpill" id="evpill" title="Start or switch the event"></button>
+  </div>
+  <nav role="tablist" id="nav">
+    <button role="tab" data-tab="register" aria-selected="true">Register</button>
+    <button role="tab" data-tab="inventory" aria-selected="false">Inventory</button>
+    <button role="tab" data-tab="sales" aria-selected="false">Sales</button>
+    <button role="tab" data-tab="reports" aria-selected="false">Reports</button>
+    <button role="tab" data-tab="data" aria-selected="false">Data &amp; Help</button>
+  </nav>
+</header>
+
+<main>
+  <!-- REGISTER -->
+  <section id="register">
+    <div id="noevent"></div>
+    <div class="reg">
+      <div>
+        <div class="chips" id="chips"></div>
+        <div class="tiles" id="tiles"></div>
+      </div>
+      <div class="card cart" id="cart">
+        <h2>Current order</h2>
+        <div id="lines"></div>
+        <div class="total"><span>Total</span><span class="num" id="total">$0.00</span></div>
+        <div class="seg" id="pay">
+          <button data-pay="cash" aria-pressed="true">Cash</button>
+          <button data-pay="card" aria-pressed="false">Card</button>
+          <button data-pay="other" aria-pressed="false">Other</button>
+        </div>
+        <div id="cashbox">
+          <div class="tender" id="tender"></div>
+          <label>Cash received<input id="tendered" inputmode="decimal" autocomplete="off" placeholder="0.00"></label>
+          <div class="change" id="change"></div>
+        </div>
+        <button class="btn primary charge" id="charge" disabled>Complete sale</button>
+        <div class="row" style="margin-top:10px">
+          <button class="btn sm" id="clear">Clear order</button>
+          <span class="spacer"></span>
+          <button class="btn sm danger" id="undo" hidden>Undo last sale</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INVENTORY -->
+  <section id="inventory" hidden>
+    <div class="row" style="margin-bottom:12px">
+      <h2>Inventory</h2>
+      <span class="spacer"></span>
+      <label class="row small" style="font-weight:500"><input type="checkbox" id="showarch" style="width:auto;min-height:0"> Show retired items</label>
+      <button class="btn primary" id="additem">+ Add item</button>
+    </div>
+    <div class="kpis" id="invkpis"></div>
+    <div class="tablewrap"><table id="invtable"></table></div>
+  </section>
+
+  <!-- SALES -->
+  <section id="sales" hidden>
+    <div class="row" style="margin-bottom:12px">
+      <h2>Sales log</h2>
+      <span class="spacer"></span>
+      <select id="salesevent" style="width:auto;max-width:100%" aria-label="Filter by event"></select>
+    </div>
+    <div class="tablewrap"><table id="salestable"></table></div>
+    <p class="small muted">Voiding a sale puts its items back in stock and removes it from every report.</p>
+  </section>
+
+  <!-- REPORTS -->
+  <section id="reports" hidden>
+    <div class="filters">
+      <label>Time period
+        <select id="range">
+          <option value="all">All time</option>
+          <option value="today">Today</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="custom">Custom dates…</option>
+        </select></label>
+      <label id="fromwrap" hidden>From<input type="date" id="from"></label>
+      <label id="towrap" hidden>To<input type="date" id="to"></label>
+      <label>Event
+        <select id="repevent"></select></label>
+    </div>
+    <div id="repbody"></div>
+  </section>
+
+  <!-- DATA -->
+  <section id="data" hidden>
+    <h2 style="margin-bottom:12px">Data &amp; Help</h2>
+    <div class="grid2">
+      <div class="card">
+        <h3>Download your data</h3>
+        <p class="small muted">Spreadsheets open in Excel, Numbers or Google Sheets. Send the backup file to the treasurer for safekeeping.</p>
+        <div class="row">
+          <a class="btn" data-export="sales" href="/api/export/sales.csv">Sales (CSV)</a>
+          <a class="btn" data-export="inventory" href="/api/export/inventory.csv">Inventory (CSV)</a>
+          <a class="btn" data-export="moves" href="/api/export/stock-moves.csv">Restock &amp; waste history (CSV)</a>
+          <a class="btn primary server-only" data-export="backup" href="/api/export/backup.db">Full backup</a>
+        </div>
+      </div>
+      <div class="card">
+        <h3>How the numbers work</h3>
+        <ul class="small" style="padding-left:18px;margin:8px 0 0;display:grid;gap:6px">
+          <li><b>Revenue</b> = what customers paid, excluding voided sales.</li>
+          <li><b>Cost of goods</b> = unit cost × units sold, using the cost at the moment of the sale.</li>
+          <li><b>Gross profit</b> = revenue − cost of goods. <b>Margin</b> = gross profit ÷ revenue.</li>
+          <li><b>Write-offs</b> = waste, spoilage, giveaways and count shortages, valued at cost. <b>Net profit</b> = gross profit − write-offs.</li>
+          <li><b>Spent on stock</b> = money paid when you log a restock. <b>Cash result</b> = revenue − spent on stock, which is what the club actually kept for the period.</li>
+          <li>When you restock, the unit cost becomes a weighted average of the old stock and the new purchase.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card local-only" id="devicecard" style="margin-bottom:16px">
+      <h3>Your data lives on this iPad</h3>
+      <p class="small muted" style="margin:6px 0 10px">Nothing is sent to the internet. If the app is deleted or the iPad is erased, the data goes with it, so back up after each event: <b>Back up now</b> opens the iPad share sheet. Save to Files, AirDrop it, or email it to the treasurer.</p>
+      <div class="kpis" style="margin-bottom:10px"><div class="kpi"><div class="k">Last backup</div><div class="v" id="lastbackup" style="font-size:20px">—</div><div class="s" id="backupnote"></div></div></div>
+      <div class="row">
+        <button class="btn primary" id="backupnow">Back up now</button>
+        <label class="btn" style="display:inline-block;font-weight:600">Restore from backup…<input type="file" id="restorefile" accept=".json,application/json" hidden></label>
+        <button class="btn" id="loaddemo">Load demo data</button>
+        <button class="btn danger" id="eraseall">Erase everything</button>
+      </div>
+      <p class="small muted" id="buildinfo" style="margin:10px 0 0"></p>
+    </div>
+    <div class="card">
+      <h3>Game-day checklist</h3>
+      <ol class="small" style="padding-left:18px;margin:8px 0 0;display:grid;gap:6px">
+        <li><b>Before:</b> tap the event pill at the top and start today’s event. Log anything you bought under <b>Inventory → Restock</b>.</li>
+        <li><b>During:</b> tap items on the Register, pick Cash / Card / Other, and Complete sale. Made a mistake? <b>Undo last sale</b>.</li>
+        <li><b>After:</b> do a quick count of what’s left. Use <b>Inventory → Adjust → Count</b> where the number differs. Then tap the event pill and End event.</li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<button class="mobilebar" id="mobilebar" hidden><span id="mbcount">0 items</span><span id="mbtotal">$0.00</span></button>
+<div id="tip"></div>
+<div id="toast" role="status"></div>
+
+<!-- dialogs -->
+<dialog id="dlg-item"><form id="f-item">
+  <h2 id="item-title">Add item</h2>
+  <label>Name<input name="name" required maxlength="60" autocomplete="off"></label>
+  <div class="two">
+    <label>Category<input name="category" list="cats" maxlength="30" value="Food" autocomplete="off"><datalist id="cats"></datalist></label>
+    <label>Price ($)<input name="price" inputmode="decimal" required placeholder="3.00"></label>
+  </div>
+  <div class="two">
+    <label>Cost per unit ($)<input name="cost" inputmode="decimal" placeholder="0.85"><span class="hint">A $24 case of 48 = $0.50 each</span></label>
+    <label>Reorder when below<input name="reorder_level" inputmode="decimal" placeholder="20"><span class="hint">Shows a low-stock warning</span></label>
+  </div>
+  <label id="startwrap">Starting stock on hand<input name="stock" inputmode="decimal" placeholder="0"></label>
+  <label id="activewrap" class="row" style="font-weight:500"><input type="checkbox" name="active" style="width:auto;min-height:0" checked> On the menu (uncheck to retire it; sales history is kept)</label>
+  <div class="err" id="item-err"></div>
+  <div class="row"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save</button></div>
+</form></dialog>
+
+<dialog id="dlg-restock"><form id="f-restock">
+  <h2 id="restock-title">Restock</h2>
+  <div class="two">
+    <label>Units bought<input name="qty" inputmode="decimal" required placeholder="48"></label>
+    <label>Total paid ($)<input name="total_cost" inputmode="decimal" required placeholder="24.00"></label>
+  </div>
+  <div class="small muted" id="restock-calc"></div>
+  <label>Note (optional)<input name="note" maxlength="100" placeholder="Sam’s Club run"></label>
+  <div class="err" id="restock-err"></div>
+  <div class="row"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Add to stock</button></div>
+</form></dialog>
+
+<dialog id="dlg-adjust"><form id="f-adjust">
+  <h2 id="adjust-title">Adjust stock</h2>
+  <label>What happened?
+    <select name="mode" id="adj-mode">
+      <option value="waste">Waste, spoiled, dropped or given away</option>
+      <option value="count">I counted the shelf and the number is different</option>
+    </select></label>
+  <label id="adj-qty-wrap">Units to remove<input name="qty" inputmode="decimal" placeholder="3"></label>
+  <label id="adj-count-wrap" hidden>Actual count on hand<input name="counted" inputmode="decimal" placeholder="0"><span class="hint" id="adj-count-hint"></span></label>
+  <label>Note (optional)<input name="note" maxlength="100"></label>
+  <div class="err" id="adjust-err"></div>
+  <div class="row"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save</button></div>
+</form></dialog>
+
+<dialog id="dlg-event"><form id="f-event">
+  <h2>Events</h2>
+  <p class="small muted" style="margin:0">An event is a game or fundraiser night. Sales are filed under whichever event is running, so you can compare nights.</p>
+  <div id="evcurrent"></div>
+  <h3>Start a new event</h3>
+  <label>Name<input name="name" required maxlength="60" placeholder="Football vs Soda Springs" autocomplete="off"></label>
+  <div class="two">
+    <label>Date<input type="date" name="date" required></label>
+    <label>Notes<input name="notes" maxlength="100"></label>
+  </div>
+  <div class="err" id="event-err"></div>
+  <div class="row"><button class="btn primary">Start event</button><span class="spacer"></span><button type="button" class="btn" data-close>Close</button></div>
+  <div id="evpast"></div>
+</form></dialog>
+
+<script>
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const money = n => usd.format(n || 0);
+const costFmt = n => { const r = Math.round(n * 100) / 100; return Math.abs(n - r) < 0.00005 ? usd.format(r) : "$" + n.toFixed(3).replace(/0+$/, ""); };
+const qtyFmt = n => String(Math.round(n * 100) / 100);
+const pct = n => (Math.round(n * 10) / 10) + "%";
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const shortDate = s => { const [y, m, d] = s.split("-"); return `${+m}/${+d}`; };
+const longDate = s => new Date(s + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+
+let S = { items: [], events: [], active_event: null };
+let cart = new Map();
+let payMethod = "cash";
+let catFilter = "All";
+let lastSaleId = null;
+let currentTab = "register";
+
+const LOCAL = typeof window.BCLocal !== "undefined";
+if (LOCAL) document.body.classList.add("local");
+async function api(path, body) {
+  if (LOCAL) return BCLocal.handle(path, body);
+  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
+  if (r.status === 401) { location.reload(); throw new Error("PIN required"); }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || "Something went wrong");
+  return data;
+}
+function toast(msg, ms = 3200) {
+  const t = $("#toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", ms);
+}
+async function refresh() {
+  S = await api("/api/state");
+  for (const [id] of cart) { const it = S.items.find(i => i.id === id); if (!it || !it.active) cart.delete(id); }
+  renderHeader(); renderRegister();
+  if (currentTab === "inventory") renderInventory();
+}
+
+/* ---------- tabs ---------- */
+function showTab(name) {
+  currentTab = name;
+  $$("#nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
+  $$("main > section").forEach(s => s.hidden = s.id !== name);
+  $("#mobilebar").hidden = !(name === "register" && cart.size);
+  if (name === "inventory") renderInventory();
+  if (name === "sales") loadSales();
+  if (name === "reports") { fillEventSelect($("#repevent"), true); loadReport(); }
+  try { history.replaceState(null, "", "#" + name); } catch (e) {}
+  window.scrollTo(0, 0);
+}
+$("#nav").addEventListener("click", e => { const b = e.target.closest("button"); if (b) showTab(b.dataset.tab); });
+
+/* ---------- header / events ---------- */
+function ago(ts) {
+  if (!ts) return "never";
+  const d = Math.floor((Date.now() - new Date(ts.replace(" ", "T")).getTime()) / 864e5);
+  return d <= 0 ? "today" : d === 1 ? "yesterday" : d + " days ago";
+}
+function backupDue() { return LOCAL && S.sales_since_backup > 0 && (!S.last_backup || (Date.now() - new Date(S.last_backup.replace(" ", "T")).getTime()) > 7 * 864e5); }
+function renderDeviceCard() {
+  if (!LOCAL) return;
+  $("#lastbackup").textContent = ago(S.last_backup);
+  $("#backupnote").textContent = S.sales_since_backup ? `${S.sales_since_backup} sale${S.sales_since_backup === 1 ? "" : "s"} not yet backed up` : "everything is backed up";
+  $("#buildinfo").textContent = `App version ${S.build} · storage: ${S.storage === "indexeddb" ? "this iPad (IndexedDB)" : S.storage}` + (S.storage === "memory" ? " — WARNING: this browser won't keep data. Open the app from the home screen icon." : "");
+}
+function renderHeader() {
+  const p = $("#evpill"), ev = S.active_event;
+  p.className = "evpill" + (ev ? "" : " none");
+  p.textContent = ev ? `● ${ev.name} · ${shortDate(ev.date)}` : "No event running · tap to start";
+  renderDeviceCard();
+}
+$("#evpill").onclick = openEvents;
+function openEvents() {
+  const ev = S.active_event;
+  $("#evcurrent").innerHTML = ev
+    ? `<div class="banner"><div><b>${esc(ev.name)}</b> is running.</div><span class="spacer"></span><button type="button" class="btn sm" id="endev">End event</button></div>`
+    : `<div class="banner">No event is running right now. New sales are saved without an event.</div>`;
+  const endBtn = $("#endev"); if (endBtn) endBtn.onclick = async () => { await api("/api/events/end", {}); await refresh(); openEvents(); toast("Event ended"); };
+  const past = S.events.filter(e => !ev || e.id !== ev.id);
+  $("#evpast").innerHTML = past.length ? `<h3>Past events</h3>` + past.slice(0, 12).map(e =>
+    `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><div><b>${esc(e.name)}</b><div class="small muted">${longDate(e.date)} · ${e.sales_count} sales · ${money(e.revenue)}</div></div><span class="spacer"></span><button type="button" class="btn sm" data-resume="${e.id}">Resume</button></div>`).join("") : "";
+  $$("[data-resume]").forEach(b => b.onclick = async () => { await api(`/api/events/${b.dataset.resume}/activate`, {}); await refresh(); $("#dlg-event").close(); toast("Event resumed"); });
+  const f = $("#f-event"); f.date.value = S.today; $("#event-err").textContent = "";
+  $("#dlg-event").showModal();
+}
+$("#f-event").addEventListener("submit", async e => {
+  e.preventDefault(); const f = e.target;
+  try {
+    await api("/api/events", { name: f.name.value, date: f.date.value, notes: f.notes.value });
+    f.reset(); await refresh(); $("#dlg-event").close(); toast("Event started. Good luck tonight!");
+  } catch (err) { $("#event-err").textContent = err.message; }
+});
+$$("dialog").forEach(d => {
+  d.addEventListener("click", e => { if (e.target === d) d.close(); });
+  $$("[data-close]", d).forEach(b => b.onclick = () => d.close());
+});
+
+/* ---------- register ---------- */
+function activeItems() { return S.items.filter(i => i.active); }
+function cartTotal() { let t = 0; for (const [id, q] of cart) { const it = S.items.find(i => i.id === id); if (it) t += Math.round(it.price * q * 100); } return t / 100; }
+function renderRegister() {
+  const items = activeItems();
+  $("#noevent").innerHTML = (S.active_event ? "" :
+    `<div class="banner"><div><b>No event is running.</b> Sales will be saved without an event, so they won’t show up in game-by-game comparisons.</div><span class="spacer"></span><button class="btn sm primary" id="startev">Start an event</button></div>`) +
+    (backupDue() ? `<div class="banner"><div><b>Time for a backup.</b> ${S.sales_since_backup} sale${S.sales_since_backup === 1 ? "" : "s"} exist only on this iPad.</div><span class="spacer"></span><button class="btn sm primary" id="backupbanner">Back up now</button></div>` : "");
+  const se = $("#startev"); if (se) se.onclick = openEvents;
+  const bb = $("#backupbanner"); if (bb) bb.onclick = doBackup;
+  const cats = ["All", ...new Set(items.map(i => i.category))];
+  if (!cats.includes(catFilter)) catFilter = "All";
+  $("#chips").innerHTML = cats.length > 2 ? cats.map(c => `<button class="chip" aria-pressed="${c === catFilter}" data-cat="${esc(c)}">${esc(c)}</button>`).join("") : "";
+  const shown = items.filter(i => catFilter === "All" || i.category === catFilter);
+  if (!items.length) {
+    $("#tiles").innerHTML = `<div class="card empty" style="grid-column:1/-1"><h3>Your menu is empty</h3><p>Add what you sell, or start from a typical stand menu and edit it.</p>
+      <button class="btn primary" id="loadsample">Load a sample menu</button><button class="btn" id="goinv">Add items myself</button></div>`;
+    $("#loadsample").onclick = async () => { await api("/api/sample-menu", {}); await refresh(); toast("Sample menu loaded. Set your real prices and costs under Inventory."); };
+    $("#goinv").onclick = () => { showTab("inventory"); $("#additem").click(); };
+  } else {
+    $("#tiles").innerHTML = shown.map(i => {
+      const q = cart.get(i.id) || 0;
+      const low = i.stock <= i.reorder_level;
+      const st = i.stock <= 0 ? "Out per count" : `${qtyFmt(i.stock)} left`;
+      return `<button class="tile" data-id="${i.id}"><span class="nm">${esc(i.name)}</span><span class="pr num">${money(i.price)}</span><span class="st ${low ? "low" : ""}">${st}</span>${q ? `<span class="qty">${q}</span>` : ""}</button>`;
+    }).join("");
+  }
+  renderCart();
+}
+$("#chips").addEventListener("click", e => { const b = e.target.closest("[data-cat]"); if (b) { catFilter = b.dataset.cat; renderRegister(); } });
+$("#tiles").addEventListener("click", e => {
+  const b = e.target.closest(".tile"); if (!b) return;
+  const id = +b.dataset.id, it = S.items.find(i => i.id === id), n = (cart.get(id) || 0) + 1;
+  cart.set(id, n);
+  if (it.stock - n < 0) toast(`${it.name}: your count says only ${qtyFmt(Math.max(it.stock, 0))} left`, 2000);
+  renderRegister();
+});
+function renderCart() {
+  const total = cartTotal();
+  $("#lines").innerHTML = cart.size ? [...cart].map(([id, q]) => {
+    const it = S.items.find(i => i.id === id);
+    return `<div class="line"><div><b>${esc(it.name)}</b><div class="small muted">${money(it.price)} each</div></div>
+      <div class="stepper"><button data-dec="${id}" aria-label="Remove one">−</button><b class="num">${q}</b><button data-inc="${id}" aria-label="Add one">+</button></div>
+      <b class="num">${money(it.price * q)}</b></div>`;
+  }).join("") : `<p class="muted">Tap items to add them to the order.</p>`;
+  $("#total").textContent = money(total);
+  $$("#pay button").forEach(b => b.setAttribute("aria-pressed", b.dataset.pay === payMethod));
+  $("#cashbox").hidden = payMethod !== "cash";
+  const tenders = [...new Set([total, ...[1, 5, 10, 20, 50, 100].filter(v => v >= total)].map(v => Math.round(v * 100) / 100))].filter(v => v > 0).slice(0, 4);
+  $("#tender").innerHTML = total > 0 ? tenders.map((v, i) => `<button class="btn sm" data-tender="${v}">${i === 0 ? "Exact" : money(v)}</button>`).join("") : "";
+  const rec = parseFloat($("#tendered").value);
+  const ch = $("#change");
+  if (payMethod === "cash" && total > 0 && !isNaN(rec)) {
+    const d = Math.round((rec - total) * 100) / 100;
+    ch.className = "change" + (d < 0 ? " bad" : ""); ch.textContent = d < 0 ? `Needs ${money(-d)} more` : `Change due: ${money(d)}`;
+  } else { ch.textContent = ""; ch.className = "change"; }
+  const cashOk = payMethod !== "cash" || isNaN(rec) || rec + 1e-9 >= total;
+  $("#charge").disabled = !cart.size || !cashOk;
+  $("#charge").textContent = cart.size ? `Complete sale · ${money(total)}` : "Complete sale";
+  const count = [...cart.values()].reduce((a, b) => a + b, 0);
+  $("#mbcount").textContent = `${count} item${count === 1 ? "" : "s"}`; $("#mbtotal").textContent = money(total) + "  ›";
+  $("#mobilebar").hidden = !(currentTab === "register" && cart.size);
+  $("#undo").hidden = !lastSaleId;
+}
+$("#lines").addEventListener("click", e => {
+  const inc = e.target.closest("[data-inc]"), dec = e.target.closest("[data-dec]");
+  if (inc) cart.set(+inc.dataset.inc, cart.get(+inc.dataset.inc) + 1);
+  if (dec) { const id = +dec.dataset.dec, n = cart.get(id) - 1; n > 0 ? cart.set(id, n) : cart.delete(id); }
+  renderRegister();
+});
+$("#pay").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { payMethod = b.dataset.pay; renderCart(); } });
+$("#tender").addEventListener("click", e => { const b = e.target.closest("[data-tender]"); if (b) { $("#tendered").value = (+b.dataset.tender).toFixed(2); renderCart(); } });
+$("#tendered").addEventListener("input", renderCart);
+$("#clear").onclick = () => { cart.clear(); $("#tendered").value = ""; renderRegister(); };
+$("#mobilebar").onclick = () => $("#cart").scrollIntoView({ behavior: "smooth", block: "start" });
+$("#charge").onclick = async () => {
+  const btn = $("#charge"); btn.disabled = true;
+  try {
+    const rec = parseFloat($("#tendered").value);
+    const r = await api("/api/sales", {
+      items: [...cart].map(([id, qty]) => ({ id, qty })), payment: payMethod,
+      tendered: payMethod === "cash" ? (isNaN(rec) ? cartTotal() : rec) : null,
+    });
+    lastSaleId = r.id; cart.clear(); $("#tendered").value = "";
+    await refresh();
+    toast(payMethod === "cash" && r.change > 0 ? `Sale #${r.id} ${money(r.total)} · give ${money(r.change)} change` : `Sale #${r.id} saved · ${money(r.total)}`, 4500);
+  } catch (err) { toast(err.message); renderCart(); }
+};
+$("#undo").onclick = async () => {
+  if (!lastSaleId || !confirm(`Undo sale #${lastSaleId}? Its items go back into stock.`)) return;
+  try { await api(`/api/sales/${lastSaleId}/void`, {}); toast(`Sale #${lastSaleId} voided`); lastSaleId = null; await refresh(); }
+  catch (err) { toast(err.message); lastSaleId = null; renderCart(); }
+};
+
+/* ---------- inventory ---------- */
+function renderInventory() {
+  const showArch = $("#showarch").checked;
+  const items = S.items.filter(i => showArch || i.active);
+  const act = S.items.filter(i => i.active);
+  const value = act.reduce((a, i) => a + Math.max(i.stock, 0) * i.cost, 0);
+  const retail = act.reduce((a, i) => a + Math.max(i.stock, 0) * i.price, 0);
+  const low = act.filter(i => i.stock <= i.reorder_level && i.reorder_level > 0);
+  $("#invkpis").innerHTML = `
+    <div class="kpi"><div class="k">Stock value (at cost)</div><div class="v num">${money(value)}</div><div class="s">money sitting on the shelf</div></div>
+    <div class="kpi"><div class="k">If it all sells</div><div class="v num">${money(retail)}</div><div class="s">${money(retail - value)} potential profit</div></div>
+    <div class="kpi"><div class="k">Low on stock</div><div class="v">${low.length}</div><div class="s">${low.length ? esc(low.slice(0, 3).map(i => i.name).join(", ")) + (low.length > 3 ? "…" : "") : "all stocked up"}</div></div>`;
+  const cats = [...new Set(S.items.map(i => i.category))];
+  $("#cats").innerHTML = cats.map(c => `<option value="${esc(c)}">`).join("");
+  if (!items.length) { $("#invtable").innerHTML = `<tbody><tr><td class="empty">No items yet. Tap “+ Add item”, or load a sample menu from the Register tab.</td></tr></tbody>`; return; }
+  $("#invtable").innerHTML = `<thead><tr><th>Item</th><th>Category</th><th class="r">Price</th><th class="r">Unit cost</th><th class="r">Profit each</th><th class="r">Margin</th><th class="r">On hand</th><th class="r">Reorder at</th><th class="r">Stock value</th><th></th></tr></thead><tbody>` +
+    items.map(i => {
+      const p = i.price - i.cost, m = i.price ? p / i.price * 100 : 0;
+      const isLow = i.active && i.reorder_level > 0 && i.stock <= i.reorder_level;
+      return `<tr class="${i.active ? "" : "archived"}"><td><b>${esc(i.name)}</b>${i.active ? "" : ' <span class="badge">retired</span>'}</td><td>${esc(i.category)}</td>
+      <td class="r num">${money(i.price)}</td><td class="r num">${costFmt(i.cost)}</td><td class="r num">${money(p)}</td><td class="r num">${pct(m)}</td>
+      <td class="r num ${isLow ? "low-flag" : ""}">${qtyFmt(i.stock)}${isLow ? " ⚠ low" : ""}</td><td class="r num">${qtyFmt(i.reorder_level)}</td><td class="r num">${money(Math.max(i.stock, 0) * i.cost)}</td>
+      <td class="right"><button class="btn sm" data-restock="${i.id}">Restock</button> <button class="btn sm" data-adjust="${i.id}">Adjust</button> <button class="btn sm" data-edit="${i.id}">Edit</button></td></tr>`;
+    }).join("") + `</tbody>`;
+}
+$("#showarch").onchange = renderInventory;
+$("#invtable").addEventListener("click", e => {
+  const g = a => { const b = e.target.closest(`[data-${a}]`); return b && S.items.find(i => i.id === +b.dataset[a]); };
+  let it;
+  if ((it = g("restock"))) openRestock(it); else if ((it = g("adjust"))) openAdjust(it); else if ((it = g("edit"))) openItem(it);
+});
+$("#additem").onclick = () => openItem(null);
+let editing = null;
+function openItem(it) {
+  editing = it; const f = $("#f-item"); f.reset();
+  $("#item-title").textContent = it ? `Edit ${it.name}` : "Add item";
+  $("#startwrap").hidden = !!it; $("#activewrap").hidden = !it;
+  if (it) { f.name.value = it.name; f.category.value = it.category; f.price.value = it.price; f.cost.value = it.cost; f.reorder_level.value = it.reorder_level; f.active.checked = !!it.active; }
+  $("#item-err").textContent = ""; $("#dlg-item").showModal(); f.name.focus();
+}
+$("#f-item").addEventListener("submit", async e => {
+  e.preventDefault(); const f = e.target;
+  const body = { name: f.name.value, category: f.category.value || "Food", price: f.price.value, cost: f.cost.value || 0, reorder_level: f.reorder_level.value || 0 };
+  try {
+    if (editing) { body.active = f.active.checked; await api(`/api/items/${editing.id}`, body); }
+    else { body.stock = f.stock.value || 0; await api("/api/items", body); }
+    $("#dlg-item").close(); await refresh(); toast("Saved");
+  } catch (err) { $("#item-err").textContent = err.message; }
+});
+let target = null;
+function openRestock(it) {
+  target = it; const f = $("#f-restock"); f.reset();
+  $("#restock-title").textContent = `Restock ${it.name}`; $("#restock-err").textContent = ""; calcRestock();
+  $("#dlg-restock").showModal(); f.qty.focus();
+}
+function calcRestock() {
+  const f = $("#f-restock"), q = parseFloat(f.qty.value), t = parseFloat(f.total_cost.value), it = target;
+  if (!(q > 0) || isNaN(t)) { $("#restock-calc").textContent = `Currently ${qtyFmt(it.stock)} on hand at ${costFmt(it.cost)} each.`; return; }
+  const on = Math.max(it.stock, 0), nc = (on * it.cost + t) / (on + q);
+  $("#restock-calc").textContent = `This purchase: ${costFmt(t / q)} each. New average cost: ${costFmt(nc)} each. New stock: ${qtyFmt(it.stock + q)}.`;
+}
+$("#f-restock").addEventListener("input", calcRestock);
+$("#f-restock").addEventListener("submit", async e => {
+  e.preventDefault(); const f = e.target;
+  try { await api(`/api/items/${target.id}/restock`, { qty: f.qty.value, total_cost: f.total_cost.value, note: f.note.value }); $("#dlg-restock").close(); await refresh(); toast(`${target.name} restocked`); }
+  catch (err) { $("#restock-err").textContent = err.message; }
+});
+function openAdjust(it) {
+  target = it; const f = $("#f-adjust"); f.reset();
+  $("#adjust-title").textContent = `Adjust ${it.name}`; $("#adjust-err").textContent = "";
+  $("#adj-count-hint").textContent = `The system thinks there are ${qtyFmt(it.stock)}.`; modeSwap();
+  $("#dlg-adjust").showModal();
+}
+function modeSwap() { const c = $("#adj-mode").value === "count"; $("#adj-qty-wrap").hidden = c; $("#adj-count-wrap").hidden = !c; }
+$("#adj-mode").onchange = modeSwap;
+$("#f-adjust").addEventListener("submit", async e => {
+  e.preventDefault(); const f = e.target;
+  try { await api(`/api/items/${target.id}/adjust`, { mode: f.mode.value, qty: f.qty.value, counted: f.counted.value, note: f.note.value }); $("#dlg-adjust").close(); await refresh(); toast("Stock updated"); }
+  catch (err) { $("#adjust-err").textContent = err.message; }
+});
+
+/* ---------- sales log ---------- */
+function fillEventSelect(sel, withAll, keep) {
+  const cur = keep ?? sel.value;
+  sel.innerHTML = `<option value="">${withAll ? "All events" : ""}</option>` + S.events.map(e => `<option value="${e.id}">${esc(e.name)} (${shortDate(e.date)})</option>`).join("") + `<option value="none">No event</option>`;
+  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+$("#salesevent").onchange = loadSales;
+async function loadSales() {
+  fillEventSelect($("#salesevent"), true);
+  const ev = $("#salesevent").value, rows = await api("/api/sales" + (ev ? `?event=${ev}` : ""));
+  if (!rows.length) { $("#salestable").innerHTML = `<tbody><tr><td class="empty">No sales yet.</td></tr></tbody>`; return; }
+  $("#salestable").innerHTML = `<thead><tr><th>#</th><th>Time</th><th>Event</th><th>Items</th><th>Paid by</th><th class="r">Total</th><th class="r">Profit</th><th></th></tr></thead><tbody>` +
+    rows.map(s => `<tr class="${s.voided ? "archived" : ""}"><td>${s.id}</td><td>${esc(s.ts.slice(5, 16).replace("-", "/"))}</td><td>${esc(s.event_name || "—")}</td>
+    <td style="white-space:normal;min-width:180px">${s.lines.map(l => `${l.qty}× ${esc(l.name)}`).join(", ")}</td><td>${esc(s.payment)}</td>
+    <td class="r num">${money(s.total)}</td><td class="r num">${money(s.total - s.cogs)}</td>
+    <td class="right">${s.voided ? '<span class="badge">voided</span>' : `<button class="btn sm danger" data-void="${s.id}">Void</button>`}</td></tr>`).join("") + `</tbody>`;
+}
+$("#salestable").addEventListener("click", async e => {
+  const b = e.target.closest("[data-void]"); if (!b) return;
+  if (!confirm(`Void sale #${b.dataset.void}? Its items go back into stock and it disappears from reports.`)) return;
+  try { await api(`/api/sales/${b.dataset.void}/void`, {}); if (lastSaleId == b.dataset.void) lastSaleId = null; await refresh(); loadSales(); toast("Sale voided"); } catch (err) { toast(err.message); }
+});
+
+/* ---------- reports ---------- */
+const filt = { range: "all" };
+$("#range").onchange = () => { const c = $("#range").value === "custom"; $("#fromwrap").hidden = $("#towrap").hidden = !c; if (c && !$("#from").value) { $("#from").value = iso(new Date(Date.now() - 30 * 864e5)); $("#to").value = iso(new Date()); } loadReport(); };
+$("#from").onchange = $("#to").onchange = loadReport;
+$("#repevent").onchange = () => { $("#range").disabled = !!$("#repevent").value; loadReport(); };
+function reportQuery() {
+  const q = new URLSearchParams(), ev = $("#repevent").value, r = $("#range").value;
+  if (ev && ev !== "none") q.set("event", ev);
+  else if (r === "today") { q.set("from", iso(new Date())); q.set("to", iso(new Date())); }
+  else if (["7", "30", "90"].includes(r)) { q.set("from", iso(new Date(Date.now() - (+r - 1) * 864e5))); q.set("to", iso(new Date())); }
+  else if (r === "custom") { if ($("#from").value) q.set("from", $("#from").value); if ($("#to").value) q.set("to", $("#to").value); }
+  return q.toString();
+}
+let REP = null;
+async function loadReport() {
+  try { REP = await api("/api/report?" + reportQuery()); renderReport(REP); }
+  catch (err) { $("#repbody").innerHTML = `<div class="card empty">${esc(err.message)}</div>`; }
+}
+const CLASS_INFO = {
+  star: ["★ Star", "Popular and profitable. Protect these: keep them stocked, visible and never run out."],
+  plowhorse: ["Plowhorse", "Popular but below-average profit per sale. A small price bump or cheaper sourcing pays off here."],
+  puzzle: ["Puzzle", "Profitable but not popular. Try promoting it, bundling it, or moving it to the front of the counter."],
+  dog: ["Dog", "Neither popular nor profitable. Consider dropping it, or buying much less of it."],
+  none: ["—", ""],
+};
+function trendBadge(t, nSess) {
+  if (t.dir === "na") return `<span class="muted small">needs 2+ events</span>`;
+  if (t.dir === "up") return `<span class="badge">▲ Rising ${t.pct != null ? "+" + t.pct + "%" : ""}</span>`;
+  if (t.dir === "down") return `<span class="badge">▼ Falling ${t.pct}%</span>`;
+  if (t.dir === "new") return `<span class="badge">▲ New seller</span>`;
+  return `<span class="badge">● Steady</span>`;
+}
+function spark(series, labels) {
+  if (series.length < 2) return "";
+  const W = 84, H = 26, mx = Math.max(...series, 1), step = W / (series.length - 1);
+  const pts = series.map((v, i) => `${(i * step).toFixed(1)},${(H - 3 - v / mx * (H - 6)).toFixed(1)}`);
+  const last = pts[pts.length - 1].split(",");
+  const tip = series.map((v, i) => `${esc(labels[i])}: <b>${v}</b>`).join("<br>");
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" data-tip="${esc(tip)}"><polyline points="${pts.join(" ")}"/><circle cx="${last[0]}" cy="${last[1]}" r="3"/></svg>`;
+}
+function renderReport(R) {
+  const T = R.totals;
+  if (!T.transactions) {
+    $("#repbody").innerHTML = `<div class="card empty"><h3>No sales in this period yet</h3><p>Once you ring up sales on the Register, profit and trend reports will show up here.</p></div>`;
+    return;
+  }
+  const kp = (k, v, s) => `<div class="kpi"><div class="k">${k}</div><div class="v num">${v}</div><div class="s">${s || ""}</div></div>`;
+  const kpis = [
+    kp("Revenue", money(T.revenue), `${T.transactions} sales · avg ${money(T.avg_sale)}`),
+    kp("Cost of goods", money(T.cogs), `${T.units} items sold`),
+    kp("Gross profit", money(T.gross_profit), `margin ${pct(T.margin)}`),
+    kp("Waste &amp; shrink", money(T.writeoffs), "valued at cost"),
+    kp("Net profit", money(T.net_profit), "after write-offs"),
+    kp("Spent on stock", money(T.purchases), `cash result ${money(T.cash_result)}`),
+    kp("Stock on hand", money(R.inventory_value), "at cost, right now"),
+  ].join("");
+  const multi = R.sessions.length >= 2;
+  const items = R.items.filter(i => i.units > 0);
+  $("#repbody").innerHTML = `
+    <div class="kpis">${kpis}</div>
+    <div class="card" style="margin-bottom:16px"><h3>What this tells you</h3><ul class="insights" id="insights"></ul></div>
+    <div class="grid2">
+      <div class="card chart"><h3>Revenue and profit by day</h3><div class="sub">Gross profit is revenue minus what the items cost you.</div>
+        <div class="legend"><span><i class="s1"></i>Revenue</span><span><i class="s2"></i>Profit</span></div><div id="ch-day"></div>
+        <details class="tbl"><summary>Show as table</summary><div id="tb-day"></div></details></div>
+      <div class="card chart"><h3>Busiest times</h3><div class="sub">Number of sales per hour of the day. Staff up for the peaks.</div><div id="ch-hour"></div>
+        <details class="tbl"><summary>Show as table</summary><div id="tb-hour"></div></details>
+        <h3 style="margin-top:14px">How people pay</h3><div id="pay-split" style="margin-top:6px"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="card chart"><h3>Best sellers</h3><div class="sub">Units sold, most popular first.</div><div id="ch-items"></div></div>
+      <div class="card chart"><h3>Popularity vs. profit</h3><div class="sub">Right = sells more. Up = earns more on each one.</div><div id="ch-scatter"></div>
+        <div class="quad-help"><div><b>★ Star</b> — popular &amp; profitable. Protect.</div><div><b>Plowhorse</b> — popular, thin profit. Raise price or cut cost.</div><div><b>Puzzle</b> — profitable, slow. Promote it.</div><div><b>Dog</b> — slow &amp; thin. Drop or buy less.</div></div></div>
+    </div>
+    <div class="card" style="margin-bottom:16px"><div class="row"><h3>Item scorecard: popular vs. less popular</h3></div>
+      <p class="small muted" style="margin:4px 0 10px">${multi ? "Trend compares each item’s share of the night’s sales in your earliest events vs. your most recent ones, so a bigger crowd doesn’t skew it. The sparkline shows units sold per event, oldest to newest." : "Trends appear once there are sales from two or more events or days."}</p>
+      <div class="tablewrap" style="border:0"><table id="scorecard"></table></div></div>
+    ${R.by_event.length > 1 ? `<div class="card chart" style="margin-bottom:16px"><h3>Event by event</h3><div class="sub">Compare nights. Revenue and profit for each.</div>
+      <div class="legend"><span><i class="s1"></i>Revenue</span><span><i class="s2"></i>Profit</span></div><div id="ch-ev"></div></div>` : ""}`;
+
+  // day chart
+  columnChart($("#ch-day"), R.by_day.map(d => ({ label: shortDate(d.day), tip: `<b>${longDate(d.day)}</b><br>Revenue ${money(d.revenue)}<br>Profit ${money(d.profit)}<br>${d.txns} sales` })),
+    [{ cls: "s1", values: R.by_day.map(d => d.revenue) }, { cls: "s2", values: R.by_day.map(d => d.profit) }]);
+  $("#tb-day").innerHTML = miniTable(["Day", "Sales", "Revenue", "Profit"], R.by_day.map(d => [longDate(d.day), d.txns, money(d.revenue), money(d.profit)]));
+  // hour chart
+  const hrs = [];
+  if (R.by_hour.length) { const a = +R.by_hour[0].hour, b = +R.by_hour[R.by_hour.length - 1].hour; for (let h = a; h <= b; h++) hrs.push(h); }
+  const hmap = Object.fromEntries(R.by_hour.map(h => [+h.hour, h]));
+  const hlabel = h => (h % 12 || 12) + (h < 12 ? "a" : "p");
+  columnChart($("#ch-hour"), hrs.map(h => ({ label: hlabel(h), tip: `<b>${hlabel(h)}</b><br>${(hmap[h] || { txns: 0 }).txns} sales<br>${money((hmap[h] || { revenue: 0 }).revenue)}` })),
+    [{ cls: "s1", values: hrs.map(h => (hmap[h] || { txns: 0 }).txns) }], { money: false });
+  $("#tb-hour").innerHTML = miniTable(["Hour", "Sales", "Revenue"], hrs.map(h => [hlabel(h), (hmap[h] || { txns: 0 }).txns, money((hmap[h] || { revenue: 0 }).revenue)]));
+  $("#pay-split").innerHTML = R.by_payment.map(p => {
+    const share = p.revenue / T.revenue * 100;
+    return `<div class="row" style="margin:4px 0"><span style="width:56px;text-transform:capitalize">${esc(p.payment)}</span><div style="flex:1;background:var(--grid);border-radius:4px"><div class="bar-mini" style="width:${share}%"></div></div><span class="num small" style="width:120px;text-align:right">${money(p.revenue)} · ${Math.round(share)}%</span></div>`;
+  }).join("");
+  hbars($("#ch-items"), items.slice(0, 12));
+  scatter($("#ch-scatter"), R);
+  if ($("#ch-ev")) columnChart($("#ch-ev"), R.by_event.map(e => ({ label: e.name.length > 12 ? e.name.slice(0, 11) + "…" : e.name, tip: `<b>${esc(e.name)}</b><br>${longDate(e.date)}<br>Revenue ${money(e.revenue)}<br>Profit ${money(e.profit)}<br>${e.txns} sales` })),
+    [{ cls: "s1", values: R.by_event.map(e => e.revenue) }, { cls: "s2", values: R.by_event.map(e => e.profit) }]);
+  const labels = R.sessions.map(s => s.label);
+  $("#scorecard").innerHTML = `<thead><tr><th>#</th><th>Item</th><th class="r">Units</th><th class="r">Share</th><th class="r">Revenue</th><th class="r">Profit</th><th class="r">Margin</th><th class="r">Profit each</th><th>Trend</th><th></th><th>Type</th></tr></thead><tbody>` +
+    R.items.map((i, n) => {
+      const c = CLASS_INFO[i.class];
+      return `<tr class="${i.active ? "" : "archived"}"><td>${n + 1}</td><td><b>${esc(i.name)}</b>${i.active ? "" : ' <span class="badge">retired</span>'}</td><td class="r num">${i.units}</td><td class="r num">${pct(i.share)}</td>
+      <td class="r num">${money(i.revenue)}</td><td class="r num">${money(i.profit)}</td><td class="r num">${pct(i.margin)}</td><td class="r num">${money(i.profit_per_unit)}</td>
+      <td>${trendBadge(i.trend)}</td><td>${spark(i.series, labels)}</td><td><span class="badge" title="${esc(c[1])}">${c[0]}</span></td></tr>`;
+    }).join("") + `</tbody>`;
+  insights(R);
+}
+function miniTable(head, rows) {
+  return `<table><thead><tr>${head.map((h, i) => `<th class="${i ? "r" : ""}">${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map((c, i) => `<td class="${i ? "r num" : ""}">${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
+function insights(R) {
+  const out = [], sold = R.items.filter(i => i.units > 0), T = R.totals;
+  const by = (k, dir = -1) => [...sold].sort((a, b) => dir * (a[k] - b[k]));
+  if (sold.length) {
+    const top = by("units")[0], earn = by("profit")[0];
+    out.push(`<b>${esc(top.name)}</b> is your best seller (${top.units} sold, ${pct(top.share)} of items).` + (earn.id !== top.id ? ` <b>${esc(earn.name)}</b> makes the most money (${money(earn.profit)}).` : ` It is also your biggest earner at ${money(top.profit)}.`));
+    const best = by("margin")[0], worst = by("margin", 1)[0];
+    if (best.id !== worst.id) out.push(`Highest margin: <b>${esc(best.name)}</b> (${pct(best.margin)}). Lowest margin: <b>${esc(worst.name)}</b> (${pct(worst.margin)}).`);
+  }
+  const plow = R.items.filter(i => i.class === "plowhorse");
+  if (plow.length) out.push(`Popular but thin on profit: <b>${plow.slice(0, 4).map(i => `${esc(i.name)} (${money(i.profit_per_unit)} each)`).join(", ")}</b> against an average of ${money(R.avg_unit_profit)}. A 25¢–50¢ price bump, or a cheaper source, pays off fastest on these.`);
+  R.items.filter(i => i.class === "puzzle" && i.units > 0).slice(0, 2).forEach(i => out.push(`<b>${esc(i.name)}</b> earns ${money(i.profit_per_unit)} each but only ${pct(i.share)} of sales. Try a combo deal or put it at the front.`));
+  const dogs = R.items.filter(i => i.class === "dog" && i.active);
+  if (dogs.length) out.push(`Slow and thin: <b>${dogs.slice(0, 4).map(i => esc(i.name)).join(", ")}</b>. Buy less of these or drop them, since each case ties up club cash.`);
+  R.items.filter(i => i.trend.dir === "up" && i.units > 0).slice(0, 2).forEach(i => out.push(`<b>${esc(i.name)}</b> is trending up${i.trend.pct != null ? ` (+${i.trend.pct}%)` : ""}. Stock more for upcoming events.`));
+  R.items.filter(i => i.trend.dir === "down" && i.units > 0).slice(0, 2).forEach(i => out.push(`<b>${esc(i.name)}</b> is trending down (${i.trend.pct}%). Order less next time.`));
+  const lowStars = R.items.filter(i => i.active && i.units > 0 && i.stock <= i.reorder_level && i.reorder_level > 0 && ["star", "plowhorse"].includes(i.class));
+  if (lowStars.length) out.push(`Low on popular items: <b>${lowStars.map(i => esc(i.name)).join(", ")}</b>. Restock before the next event.`);
+  if (R.by_hour.length > 1) { const pk = [...R.by_hour].sort((a, b) => b.txns - a.txns)[0], h = +pk.hour; out.push(`Rush hour is around <b>${(h % 12 || 12)}${h < 12 ? "am" : "pm"}</b> (${pk.txns} sales). Have the best-sellers prepped by then.`); }
+  if (T.writeoffs > 0 && T.revenue) out.push(`Waste and shrink cost ${money(T.writeoffs)} (${pct(T.writeoffs / T.revenue * 100)} of revenue).`);
+  $("#insights").innerHTML = out.map(o => `<li>${o}</li>`).join("");
+}
+
+/* ---------- charts (plain SVG) ---------- */
+function niceMax(v) { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))), f = v / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; }
+function topRound(x, y, w, h, r) { r = Math.min(r, w / 2, h); return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`; }
+function columnChart(el, cats, series, opt = {}) {
+  const W = 640, H = 240, L = 46, R = 8, T = 10, B = 28, pw = W - L - R, ph = H - T - B;
+  const isMoney = opt.money !== false;
+  const max = niceMax(Math.max(...series.flatMap(s => s.values), 0.01));
+  const y = v => T + ph - v / max * ph, n = cats.length, gw = pw / n;
+  const bw = Math.min(30, (gw - 6) / series.length - 2);
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const v = max / 4 * i, yy = y(v); g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}"/><text class="t-muted" x="${L - 6}" y="${yy + 4}" text-anchor="end">${isMoney ? "$" + (v >= 1000 ? (v / 1000) + "k" : +v.toFixed(1)) : +v.toFixed(1)}</text>`; }
+  const every = Math.ceil(n / 12);
+  cats.forEach((c, i) => {
+    const cx = L + gw * i + gw / 2, total = series.length * bw + (series.length - 1) * 2, x0 = cx - total / 2;
+    series.forEach((s, k) => { const v = s.values[i], h = Math.max(v >= 0 ? v / max * ph : 0, 0); if (h > 0) g += `<path class="${s.cls}" d="${topRound(x0 + k * (bw + 2), T + ph - h, bw, h, 4)}"/>`; });
+    if (i % every === 0) g += `<text class="t-muted" x="${cx}" y="${H - 8}" text-anchor="middle">${esc(c.label)}</text>`;
+    g += `<rect class="hit" x="${L + gw * i}" y="${T}" width="${gw}" height="${ph}" data-tip="${esc(c.tip)}"/>`;
+  });
+  el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" role="img">${g}<line class="axis" x1="${L}" x2="${W - R}" y1="${T + ph}" y2="${T + ph}"/></svg>`;
+}
+function hbars(el, items) {
+  if (!items.length) { el.innerHTML = `<p class="muted">Nothing sold yet.</p>`; return; }
+  const W = 640, rowH = 28, L = 130, R = 46, H = items.length * rowH + 6, max = Math.max(...items.map(i => i.units));
+  let g = "";
+  items.forEach((it, i) => {
+    const yy = 3 + i * rowH, w = Math.max(it.units / max * (W - L - R), 2);
+    g += `<text x="${L - 8}" y="${yy + 17}" text-anchor="end">${esc(it.name.length > 18 ? it.name.slice(0, 17) + "…" : it.name)}</text>
+      <path class="s1" d="M${L},${yy + 4}H${L + w - 4}Q${L + w},${yy + 4} ${L + w},${yy + 8}V${yy + 16}Q${L + w},${yy + 20} ${L + w - 4},${yy + 20}H${L}Z"/>
+      <text class="num" x="${L + w + 6}" y="${yy + 17}">${it.units}</text>
+      <rect class="hit" x="0" y="${yy}" width="${W}" height="${rowH}" data-tip="${esc(`<b>${it.name}</b><br>${it.units} sold (${pct(it.share)})<br>Revenue ${money(it.revenue)}<br>Profit ${money(it.profit)}`)}"/>`;
+  });
+  el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
+}
+function scatter(el, R) {
+  const pts = R.items.filter(i => i.units > 0);
+  if (pts.length < 2) { el.innerHTML = `<p class="muted">Needs at least two items with sales.</p>`; return; }
+  const W = 640, H = 330, L = 50, Rr = 18, T = 18, B = 44, pw = W - L - Rr, ph = H - T - B;
+  const xmax = niceMax(Math.max(...pts.map(p => p.share), R.pop_cut_pct) * 1.1);
+  const ys = pts.map(p => p.profit_per_unit).concat(R.avg_unit_profit);
+  const ymin = Math.min(0, ...ys), ymax = niceMax(Math.max(...ys) * 1.15);
+  const x = v => L + v / xmax * pw, y = v => T + ph - (v - ymin) / (ymax - ymin) * ph;
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const v = ymin + (ymax - ymin) / 4 * i; g += `<line class="grid" x1="${L}" x2="${W - Rr}" y1="${y(v)}" y2="${y(v)}"/><text class="t-muted" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">$${v.toFixed(2)}</text>`; }
+  for (let i = 0; i <= 5; i++) { const v = xmax / 5 * i; g += `<text class="t-muted" x="${x(v)}" y="${H - 24}" text-anchor="middle">${+v.toFixed(1)}%</text>`; }
+  g += `<line class="guide" x1="${x(R.pop_cut_pct)}" x2="${x(R.pop_cut_pct)}" y1="${T}" y2="${T + ph}"/><line class="guide" x1="${L}" x2="${W - Rr}" y1="${y(R.avg_unit_profit)}" y2="${y(R.avg_unit_profit)}"/>`;
+  g += `<text class="t-muted" x="${W - Rr - 4}" y="${T + 12}" text-anchor="end">★ STARS</text><text class="t-muted" x="${L + 4}" y="${T + 12}">PUZZLES</text><text class="t-muted" x="${W - Rr - 4}" y="${T + ph - 6}" text-anchor="end">PLOWHORSES</text><text class="t-muted" x="${L + 4}" y="${T + ph - 6}">DOGS</text>`;
+  g += `<text class="t-muted" x="${L + pw / 2}" y="${H - 6}" text-anchor="middle">Share of all items sold →</text><text class="t-muted" transform="translate(12 ${T + ph / 2}) rotate(-90)" text-anchor="middle">Profit per item →</text>`;
+  const boxes = [], hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  let dots = "", labs = "";
+  [...pts].sort((a, b) => b.units - a.units).forEach(p => {
+    const cx = x(p.share), cy = y(p.profit_per_unit), tw = p.name.length * 5.8 + 4, th = 12;
+    const cand = [{ x: cx + 9, y: cy - 6, a: "start" }, { x: cx - 9 - tw, y: cy - 6, a: "end" }, { x: cx - tw / 2, y: cy - 22, a: "middle" }, { x: cx - tw / 2, y: cy + 10, a: "middle" }];
+    let pick = cand[0];
+    for (const c of cand) { const b = { x: c.x, y: c.y, w: tw, h: th }; if (b.x >= L - 4 && b.x + tw <= W && !boxes.some(o => hit(o, b))) { pick = c; break; } }
+    boxes.push({ x: pick.x, y: pick.y, w: tw, h: th });
+    const lx = pick.a === "start" ? pick.x : pick.a === "end" ? pick.x + tw - 4 : pick.x + tw / 2;
+    labs += `<text x="${lx}" y="${pick.y + 10}" text-anchor="${pick.a}" style="fill:var(--ink)">${esc(p.name)}</text>`;
+    dots += `<circle class="s1" cx="${cx}" cy="${cy}" r="6" style="stroke:var(--card);stroke-width:2"/><circle class="hit" cx="${cx}" cy="${cy}" r="14" data-tip="${esc(`<b>${p.name}</b> · ${CLASS_INFO[p.class][0]}<br>${p.units} sold (${pct(p.share)})<br>Profit each ${money(p.profit_per_unit)}<br>Margin ${pct(p.margin)}`)}"/>`;
+  });
+  el.innerHTML = `<svg class="c" viewBox="0 0 ${W} ${H}" role="img">${g}${dots}${labs}</svg>`;
+}
+/* tooltip */
+const tip = $("#tip");
+function placeTip(e) { const t = e.target.closest ? e.target.closest("[data-tip]") : null; if (!t) { tip.style.display = "none"; return; } tip.innerHTML = t.getAttribute("data-tip"); tip.style.display = "block"; const w = tip.offsetWidth, h = tip.offsetHeight; let x = e.clientX + 14, y = e.clientY + 14; if (x + w > innerWidth - 8) x = e.clientX - w - 14; if (y + h > innerHeight - 8) y = e.clientY - h - 14; tip.style.left = Math.max(4, x) + "px"; tip.style.top = Math.max(4, y) + "px"; }
+document.addEventListener("pointermove", placeTip);
+document.addEventListener("pointerdown", placeTip);
+document.addEventListener("pointerleave", () => tip.style.display = "none");
+document.addEventListener("scroll", () => tip.style.display = "none", { passive: true });
+
+/* ---------- data tab (exports, and backup/restore for the on-device build) ---------- */
+document.addEventListener("click", async e => {
+  const a = e.target.closest("[data-export]");
+  if (!a || !LOCAL) return;
+  e.preventDefault();
+  try { await BCLocal.exportFile(a.dataset.export); } catch (err) { toast(err.message); }
+});
+async function doBackup() {
+  try { const ok = await BCLocal.exportFile("backup"); if (ok) toast("Backup saved. Keep that file somewhere safe."); await refresh(); } catch (err) { toast(err.message); }
+}
+if (LOCAL) {
+  $("#backupnow").onclick = doBackup;
+  $("#restorefile").onchange = async e => {
+    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    if (!confirm("Restore from this backup? It REPLACES everything currently on this iPad.")) return;
+    try { await api("/api/local/restore", { json: await f.text() }); cart.clear(); lastSaleId = null; await refresh(); toast("Backup restored"); }
+    catch (err) { toast(err.message, 6000); }
+  };
+  $("#loaddemo").onclick = async () => {
+    if (!confirm("Load made-up demo data for practice? It REPLACES everything on this iPad. Back up first if you have real data.")) return;
+    try { await api("/api/local/demo", {}); cart.clear(); lastSaleId = null; await refresh(); toast("Demo data loaded. Erase it before game day."); showTab("reports"); }
+    catch (err) { toast(err.message, 6000); }
+  };
+  $("#eraseall").onclick = async () => {
+    if (!confirm("Erase ALL items, sales and events on this iPad? This cannot be undone.")) return;
+    if (!confirm("Really erase everything? Make sure you have a backup.")) return;
+    try { await api("/api/local/erase", {}); cart.clear(); lastSaleId = null; await refresh(); toast("Everything erased"); } catch (err) { toast(err.message); }
+  };
+}
+
+/* ---------- boot ---------- */
+(async function () {
+  try { await refresh(); } catch (e) { toast(e.message, 8000); }
+  const h = location.hash.slice(1);
+  if (["register", "inventory", "sales", "reports", "data"].includes(h)) showTab(h);
+})();
+</script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});</script>
+</body>
+</html>
