@@ -4,7 +4,7 @@
  */
 "use strict";
 (function () {
-  const BUILD = "2026.10.04-1557";
+  const BUILD = "2026.10.04-1649";
   const PAYMENTS = ["cash", "card", "other"];
   const SAMPLE_MENU = [
     ["Hot Dog", "Food", 3.0, 0.85, 0, 20], ["Nachos", "Food", 3.5, 1.05, 0, 15], ["Pretzel", "Food", 3.0, 0.9, 0, 10],
@@ -19,6 +19,7 @@
   const money = x => Math.round((Number(x) + 1e-9) * 100) / 100;
   const round = (x, n) => { const p = Math.pow(10, n); return Math.round((x + 1e-9) * p) / p; };
   const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const COMBO_DISCOUNT = 1.0; // $ off per combo; a combo is any 3 items on one order
 
   function num(body, key, o = {}) {
     let v = body[key];
@@ -155,6 +156,15 @@
     } else bad("Unknown adjustment");
   }
 
+  // Split a discount (cents) across line totals (cents) proportionally; leftover cents go to the biggest lines.
+  function allocateDiscount(grosses, discount) {
+    const total = grosses.reduce((a, b) => a + b, 0);
+    const alloc = grosses.map(g => (total ? Math.floor((discount * g) / total) : 0));
+    const order = grosses.map((g, i) => i).sort((a, b) => grosses[b] - grosses[a] || a - b);
+    const left = discount - alloc.reduce((a, b) => a + b, 0);
+    for (const i of order.slice(0, left)) alloc[i] += 1;
+    return alloc;
+  }
   function createSale(body) {
     const lines = body.items;
     if (!Array.isArray(lines) || !lines.length) bad("The cart is empty");
@@ -172,18 +182,25 @@
       rows.push([it, qty]); total += money(it.price * qty);
     }
     total = money(total);
+    const combos = num(body, "combos", { def: 0, min: 0, max: 999, int: true });
+    const units = rows.reduce((a, [, q]) => a + q, 0);
+    if (combos > Math.floor(units / 3)) bad("A combo needs 3 items. Add more items or remove a combo discount.");
+    const discount = money(combos * COMBO_DISCOUNT);
+    if (discount > total + 1e-9) bad("The combo discount is larger than the order");
+    const alloc = allocateDiscount(rows.map(([it, q]) => Math.round(money(it.price * q) * 100)), Math.round(discount * 100));
+    total = money(total - discount);
     let tendered = null;
     if (body.payment === "cash") {
       tendered = money(num(body, "tendered", { def: total, min: 0, max: 100000 }));
       if (tendered + 1e-9 < total) bad("Cash received is less than the total");
     }
     const ev = activeEvent(), sid = nid("sale");
-    DB.sales.push({ id: sid, ts: nowStr(), event_id: ev ? ev.id : null, payment: body.payment, total, tendered, voided: 0, void_ts: null });
-    for (const [it, qty] of rows) {
-      DB.lines.push({ id: nid("line"), sale_id: sid, item_id: it.id, name: it.name, qty, price: it.price, cost: it.cost });
+    DB.sales.push({ id: sid, ts: nowStr(), event_id: ev ? ev.id : null, payment: body.payment, total, tendered, voided: 0, void_ts: null, combos, discount });
+    rows.forEach(([it, qty], i) => {
+      DB.lines.push({ id: nid("line"), sale_id: sid, item_id: it.id, name: it.name, qty, price: it.price, cost: it.cost, disc: alloc[i] / 100 });
       it.stock -= qty;
-    }
-    return { id: sid, total, change: tendered !== null ? money(tendered - total) : 0 };
+    });
+    return { id: sid, total, discount, change: tendered !== null ? money(tendered - total) : 0 };
   }
   function voidSale(id) {
     const sale = DB.sales.find(s => s.id === id) || bad("Sale not found");
@@ -206,8 +223,8 @@
     rows.sort((a, b) => b.id - a.id);
     return rows.slice(0, Math.min(parseInt(q.limit || 200, 10), 1000)).map(s => {
       const ls = lbs.get(s.id) || [];
-      return { ...s, event_name: s.event_id !== null ? evName.get(s.event_id) || null : null,
-        lines: ls.map(l => ({ name: l.name, qty: l.qty, price: l.price, cost: l.cost })), cogs: round(ls.reduce((a, l) => a + l.qty * l.cost, 0), 2) };
+      return { ...s, combos: s.combos || 0, discount: s.discount || 0, event_name: s.event_id !== null ? evName.get(s.event_id) || null : null,
+        lines: ls.map(l => ({ name: l.name, qty: l.qty, price: l.price, cost: l.cost, disc: l.disc || 0 })), cogs: round(ls.reduce((a, l) => a + l.qty * l.cost, 0), 2) };
     });
   }
 
@@ -327,7 +344,7 @@
     const writeoffs = money(moves.filter(m => m.kind === "waste" || m.kind === "count").reduce((a, m) => a + m.amount, 0));
     const purchases = money(moves.filter(m => m.kind === "purchase").reduce((a, m) => a + m.amount, 0));
     const totals = { revenue, cogs: cost, gross_profit: gross, margin: revenue ? round(gross / revenue * 100, 1) : 0, transactions: txns, units,
-      avg_sale: txns ? money(revenue / txns) : 0, writeoffs, net_profit: money(gross - writeoffs), purchases, cash_result: money(revenue - purchases) };
+      avg_sale: txns ? money(revenue / txns) : 0, discounts: money(sales.reduce((a, s) => a + (s.discount || 0), 0)), combos: sales.reduce((a, s) => a + (s.combos || 0), 0), writeoffs, net_profit: money(gross - writeoffs), purchases, cash_result: money(revenue - purchases) };
 
     const group = (keyFn) => { const m = new Map(); for (const s of sales) { const k = keyFn(s); if (!m.has(k)) m.set(k, []); m.get(k).push(s); } return m; };
     const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
@@ -351,7 +368,7 @@
         const sm = series.get(l.item_id); sm.set(key, (sm.get(key) || 0) + l.qty);
         sessTotal.set(key, (sessTotal.get(key) || 0) + l.qty);
         const o = sold.get(l.item_id) || { units: 0, revenue: 0, cogs: 0 };
-        o.units += l.qty; o.revenue += l.qty * l.price; o.cogs += l.qty * l.cost; sold.set(l.item_id, o);
+        o.units += l.qty; o.revenue += l.qty * l.price - (l.disc || 0); o.cogs += l.qty * l.cost; sold.set(l.item_id, o);
       }
     }
     const order = [...sessions.keys()].sort((a, b) => cmp(sessions.get(a).date, sessions.get(b).date) || cmp(a, b));
@@ -390,9 +407,9 @@
     const evName = new Map(DB.events.map(e => [e.id, e.name])), itemName = new Map(DB.items.map(i => [i.id, i.name]));
     if (kind === "sales") {
       const sales = new Map(DB.sales.map(s => [s.id, s]));
-      return csv(["sale_id", "time", "event", "payment", "item", "qty", "price", "unit_cost", "line_total", "line_profit", "voided"],
+      return csv(["sale_id", "time", "event", "payment", "item", "qty", "price", "unit_cost", "line_total", "combo_discount", "line_profit", "voided"],
         DB.lines.slice().sort((a, b) => a.sale_id - b.sale_id || a.id - b.id).map(l => { const s = sales.get(l.sale_id);
-          return [l.sale_id, s.ts, evName.get(s.event_id) || "", s.payment, l.name, l.qty, l.price, l.cost, r4(l.qty * l.price), r4(l.qty * l.price - l.qty * l.cost), s.voided]; }));
+          return [l.sale_id, s.ts, evName.get(s.event_id) || "", s.payment, l.name, l.qty, l.price, l.cost, r4(l.qty * l.price), l.disc || 0, r4(l.qty * l.price - (l.disc || 0) - l.qty * l.cost), s.voided]; }));
     }
     if (kind === "inventory") {
       return csv(["item", "category", "price", "unit_cost", "profit_per_unit", "on_hand", "reorder_at", "stock_value", "active"],

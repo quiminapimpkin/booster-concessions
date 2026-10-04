@@ -106,6 +106,11 @@ a.btn.primary { color: var(--accent-ink); }
 .tender { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .change { font-size: 20px; font-weight: 800; margin: 6px 0 10px; }
 .change.bad { color: var(--danger); }
+.combobox { display: grid; gap: 6px; margin: 10px 0 4px; }
+.combobox .btn { width: 100%; }
+.combobox .btn.combo { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); min-height: 46px; font-size: 17px; }
+.combobox .btn.combo:disabled { background: transparent; border-color: var(--line); color: var(--muted); }
+.subrow { display: flex; justify-content: space-between; color: var(--ink2); padding: 2px 0; }
 .charge { width: 100%; font-size: 20px; padding: 14px; border-radius: 12px; }
 .mobilebar { display: none; }
 .mobilebar[hidden] { display: none !important; }
@@ -233,6 +238,8 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
       <div class="card cart" id="cart">
         <h2>Current order</h2>
         <div id="lines"></div>
+        <div class="combobox" id="combobox"></div>
+        <div id="subrows"></div>
         <div class="total"><span>Total</span><span class="num" id="total">$0.00</span></div>
         <div class="seg" id="pay">
           <button data-pay="cash" aria-pressed="true">Cash</button>
@@ -320,7 +327,7 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
       <div class="card">
         <h3>How the numbers work</h3>
         <ul class="small" style="padding-left:18px;margin:8px 0 0;display:grid;gap:6px">
-          <li><b>Revenue</b> = what customers paid, excluding voided sales.</li>
+          <li><b>Revenue</b> = what customers paid, excluding voided sales. Combo discounts are already taken off, and each item’s share of the discount is taken off its own revenue and profit.</li>
           <li><b>Cost of goods</b> = unit cost × units sold, using the cost at the moment of the sale.</li>
           <li><b>Gross profit</b> = revenue − cost of goods. <b>Margin</b> = gross profit ÷ revenue.</li>
           <li><b>Write-offs</b> = waste, spoilage, giveaways and count shortages, valued at cost. <b>Net profit</b> = gross profit − write-offs.</li>
@@ -345,7 +352,7 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
       <h3>Game-day checklist</h3>
       <ol class="small" style="padding-left:18px;margin:8px 0 0;display:grid;gap:6px">
         <li><b>Before:</b> tap the event pill at the top and start today’s event. Log anything you bought under <b>Inventory → Restock</b>. On the <b>Till</b> tab, count your starting change by bill and coin and tap Open till.</li>
-        <li><b>During:</b> tap items on the Register, pick Cash / Card / Other, and Complete sale. Made a mistake? <b>Undo last sale</b>.</li>
+        <li><b>During:</b> tap items on the Register. With 3+ items, tap <b>Combo discount</b> for $1 off (once per 3 items). Pick Cash / Card / Other, and Complete sale. Made a mistake? <b>Undo last sale</b>.</li>
         <li><b>After:</b> on the <b>Till</b> tab, count the drawer and Close till to see over/short and what to deposit. Then do a quick count of what’s left. Use <b>Inventory → Adjust → Count</b> where the number differs. Then tap the event pill and End event.</li>
       </ol>
     </div>
@@ -453,6 +460,8 @@ const longDate = s => new Date(s + "T12:00:00").toLocaleDateString(undefined, { 
 let S = { items: [], events: [], active_event: null };
 let cart = new Map();
 let payMethod = "cash";
+let combos = 0;               // $1-off combo discounts applied to the current order (any 3 items = 1 combo)
+const COMBO_OFF = 1;
 let catFilter = "All";
 let lastSaleId = null;
 let currentTab = "register";
@@ -541,7 +550,10 @@ $$("dialog").forEach(d => {
 
 /* ---------- register ---------- */
 function activeItems() { return S.items.filter(i => i.active); }
-function cartTotal() { let t = 0; for (const [id, q] of cart) { const it = S.items.find(i => i.id === id); if (it) t += Math.round(it.price * q * 100); } return t / 100; }
+function subtotal() { let t = 0; for (const [id, q] of cart) { const it = S.items.find(i => i.id === id); if (it) t += Math.round(it.price * q * 100); } return t / 100; }
+function itemCount() { let n = 0; for (const q of cart.values()) n += q; return n; }
+function maxCombos() { return Math.max(0, Math.min(Math.floor(itemCount() / 3), Math.floor(subtotal() / COMBO_OFF))); }
+function cartTotal() { combos = Math.min(combos, maxCombos()); return Math.round((subtotal() - combos * COMBO_OFF) * 100) / 100; }
 function renderRegister() {
   const items = activeItems();
   $("#noevent").innerHTML = (S.active_event ? "" :
@@ -586,6 +598,13 @@ function renderCart() {
       <div class="stepper"><button data-dec="${id}" aria-label="Remove one">−</button><b class="num">${q}</b><button data-inc="${id}" aria-label="Add one">+</button></div>
       <b class="num">${money(it.price * q)}</b></div>`;
   }).join("") : `<p class="muted">Tap items to add them to the order.</p>`;
+  const n = itemCount(), mx = maxCombos();
+  let comboHtml = "";
+  if (n > 0 && n < 3) comboHtml = `<button class="btn combo" disabled>🎟 Combo −${money(COMBO_OFF)} · add ${3 - n} more item${3 - n === 1 ? "" : "s"}</button>`;
+  else if (n >= 3) comboHtml = `<button class="btn combo" id="combo-add" ${combos >= mx ? "disabled" : ""}>🎟 ${combos >= mx ? "All combos applied" : `Combo discount −${money(COMBO_OFF)}`}</button>` +
+    (combos ? `<div class="row small muted"><span>${combos} of ${mx} possible combo${mx === 1 ? "" : "s"} applied</span><span class="spacer"></span><button class="btn sm" id="combo-rm">Remove one</button></div>` : `<div class="small muted">${mx} combo${mx === 1 ? "" : "s"} possible: every 3 items on the order earns ${money(COMBO_OFF)} off.</div>`);
+  $("#combobox").innerHTML = comboHtml;
+  $("#subrows").innerHTML = combos ? `<div class="subrow"><span>Subtotal</span><span class="num">${money(subtotal())}</span></div><div class="subrow"><span>Combo discount × ${combos}</span><span class="num">−${money(combos * COMBO_OFF)}</span></div>` : "";
   $("#total").textContent = money(total);
   $$("#pay button").forEach(b => b.setAttribute("aria-pressed", b.dataset.pay === payMethod));
   $("#cashbox").hidden = payMethod !== "cash";
@@ -611,20 +630,24 @@ $("#lines").addEventListener("click", e => {
   if (dec) { const id = +dec.dataset.dec, n = cart.get(id) - 1; n > 0 ? cart.set(id, n) : cart.delete(id); }
   renderRegister();
 });
+$("#combobox").addEventListener("click", e => {
+  if (e.target.closest("#combo-add")) { if (combos < maxCombos()) combos++; renderRegister(); }
+  else if (e.target.closest("#combo-rm")) { combos = Math.max(0, combos - 1); renderRegister(); }
+});
 $("#pay").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { payMethod = b.dataset.pay; renderCart(); } });
 $("#tender").addEventListener("click", e => { const b = e.target.closest("[data-tender]"); if (b) { $("#tendered").value = (+b.dataset.tender).toFixed(2); renderCart(); } });
 $("#tendered").addEventListener("input", renderCart);
-$("#clear").onclick = () => { cart.clear(); $("#tendered").value = ""; renderRegister(); };
+$("#clear").onclick = () => { cart.clear(); combos = 0; $("#tendered").value = ""; renderRegister(); };
 $("#mobilebar").onclick = () => $("#cart").scrollIntoView({ behavior: "smooth", block: "start" });
 $("#charge").onclick = async () => {
   const btn = $("#charge"); btn.disabled = true;
   try {
     const rec = parseFloat($("#tendered").value);
     const r = await api("/api/sales", {
-      items: [...cart].map(([id, qty]) => ({ id, qty })), payment: payMethod,
+      items: [...cart].map(([id, qty]) => ({ id, qty })), payment: payMethod, combos,
       tendered: payMethod === "cash" ? (isNaN(rec) ? cartTotal() : rec) : null,
     });
-    lastSaleId = r.id; cart.clear(); $("#tendered").value = "";
+    lastSaleId = r.id; cart.clear(); combos = 0; $("#tendered").value = "";
     await refresh();
     toast(payMethod === "cash" && r.change > 0 ? `Sale #${r.id} ${money(r.total)} · give ${money(r.change)} change` : `Sale #${r.id} saved · ${money(r.total)}`, 4500);
   } catch (err) { toast(err.message); renderCart(); }
@@ -729,7 +752,7 @@ async function loadSales() {
   if (!rows.length) { $("#salestable").innerHTML = `<tbody><tr><td class="empty">No sales yet.</td></tr></tbody>`; return; }
   $("#salestable").innerHTML = `<thead><tr><th>#</th><th>Time</th><th>Event</th><th>Items</th><th>Paid by</th><th class="r">Total</th><th class="r">Profit</th><th></th></tr></thead><tbody>` +
     rows.map(s => `<tr class="${s.voided ? "archived" : ""}"><td>${s.id}</td><td>${esc(s.ts.slice(5, 16).replace("-", "/"))}</td><td>${esc(s.event_name || "—")}</td>
-    <td style="white-space:normal;min-width:180px">${s.lines.map(l => `${l.qty}× ${esc(l.name)}`).join(", ")}</td><td>${esc(s.payment)}</td>
+    <td style="white-space:normal;min-width:180px">${s.lines.map(l => `${l.qty}× ${esc(l.name)}`).join(", ")}${s.combos ? ` <span class="badge">combo ×${s.combos} −${money(s.discount)}</span>` : ""}</td><td>${esc(s.payment)}</td>
     <td class="r num">${money(s.total)}</td><td class="r num">${money(s.total - s.cogs)}</td>
     <td class="right">${s.voided ? '<span class="badge">voided</span>' : `<button class="btn sm danger" data-void="${s.id}">Void</button>`}</td></tr>`).join("") + `</tbody>`;
 }
@@ -790,6 +813,7 @@ function renderReport(R) {
     kp("Revenue", money(T.revenue), `${T.transactions} sales · avg ${money(T.avg_sale)}`),
     kp("Cost of goods", money(T.cogs), `${T.units} items sold`),
     kp("Gross profit", money(T.gross_profit), `margin ${pct(T.margin)}`),
+    ...(T.combos ? [kp("Combo discounts", money(T.discounts), `${T.combos} combo${T.combos === 1 ? "" : "s"} given`)] : []),
     kp("Waste &amp; shrink", money(T.writeoffs), "valued at cost"),
     kp("Net profit", money(T.net_profit), "after write-offs"),
     kp("Spent on stock", money(T.purchases), `cash result ${money(T.cash_result)}`),
