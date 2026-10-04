@@ -108,6 +108,7 @@ a.btn.primary { color: var(--accent-ink); }
 .change.bad { color: var(--danger); }
 .charge { width: 100%; font-size: 20px; padding: 14px; border-radius: 12px; }
 .mobilebar { display: none; }
+.mobilebar[hidden] { display: none !important; }
 
 /* tables */
 .tablewrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
@@ -123,7 +124,20 @@ tr.archived td { opacity: .5; }
 /* forms */
 dialog { border: 0; border-radius: 16px; padding: 0; width: min(460px, 94vw); background: var(--card); color: var(--ink); box-shadow: 0 10px 40px #0006; }
 dialog::backdrop { background: #0007; }
+dialog { max-height: 94vh; overflow-y: auto; }
 dialog form { padding: 20px; display: grid; gap: 12px; }
+.denoms { display: grid; }
+.drow { display: grid; grid-template-columns: 1fr auto 84px; gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.drow .dl { font-weight: 700; }
+.drow .dl small { font-weight: 500; color: var(--muted); }
+.drow input { width: 72px; min-height: 42px; text-align: center; font-weight: 700; font-size: 18px; padding: 4px; }
+.drow .stepper button { width: 42px; height: 42px; }
+.drow .ds { text-align: right; font-weight: 700; }
+.ctotal { display: flex; justify-content: space-between; font-size: 24px; font-weight: 800; }
+.vbox { border-radius: 10px; padding: 8px 12px; background: var(--accent-soft); font-weight: 700; }
+.vbox.bad { color: var(--danger); }
+.act { display: grid; grid-template-columns: 70px 1fr auto auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.act:last-child { border-bottom: 0; }
 label { display: grid; gap: 4px; font-weight: 600; font-size: 14px; }
 label .hint { font-weight: 400; color: var(--muted); font-size: 12.5px; }
 input, select, textarea { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 9px 10px; min-height: 40px; width: 100%; }
@@ -198,6 +212,7 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
   </div>
   <nav role="tablist" id="nav">
     <button role="tab" data-tab="register" aria-selected="true">Register</button>
+    <button role="tab" data-tab="till" aria-selected="false">Till</button>
     <button role="tab" data-tab="inventory" aria-selected="false">Inventory</button>
     <button role="tab" data-tab="sales" aria-selected="false">Sales</button>
     <button role="tab" data-tab="reports" aria-selected="false">Reports</button>
@@ -211,6 +226,7 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
     <div id="noevent"></div>
     <div class="reg">
       <div>
+        <div id="tillchip"></div>
         <div class="chips" id="chips"></div>
         <div class="tiles" id="tiles"></div>
       </div>
@@ -236,6 +252,11 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
         </div>
       </div>
     </div>
+  </section>
+
+  <!-- TILL -->
+  <section id="till" hidden>
+    <div id="tillbody"></div>
   </section>
 
   <!-- INVENTORY -->
@@ -291,6 +312,7 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
         <div class="row">
           <a class="btn" data-export="sales" href="/api/export/sales.csv">Sales (CSV)</a>
           <a class="btn" data-export="inventory" href="/api/export/inventory.csv">Inventory (CSV)</a>
+          <a class="btn" data-export="till" href="/api/export/till.csv">Till history (CSV)</a>
           <a class="btn" data-export="moves" href="/api/export/stock-moves.csv">Restock &amp; waste history (CSV)</a>
           <a class="btn primary server-only" data-export="backup" href="/api/export/backup.db">Full backup</a>
         </div>
@@ -322,9 +344,9 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
     <div class="card">
       <h3>Game-day checklist</h3>
       <ol class="small" style="padding-left:18px;margin:8px 0 0;display:grid;gap:6px">
-        <li><b>Before:</b> tap the event pill at the top and start today’s event. Log anything you bought under <b>Inventory → Restock</b>.</li>
+        <li><b>Before:</b> tap the event pill at the top and start today’s event. Log anything you bought under <b>Inventory → Restock</b>. On the <b>Till</b> tab, count your starting change by bill and coin and tap Open till.</li>
         <li><b>During:</b> tap items on the Register, pick Cash / Card / Other, and Complete sale. Made a mistake? <b>Undo last sale</b>.</li>
-        <li><b>After:</b> do a quick count of what’s left. Use <b>Inventory → Adjust → Count</b> where the number differs. Then tap the event pill and End event.</li>
+        <li><b>After:</b> on the <b>Till</b> tab, count the drawer and Close till to see over/short and what to deposit. Then do a quick count of what’s left. Use <b>Inventory → Adjust → Count</b> where the number differs. Then tap the event pill and End event.</li>
       </ol>
     </div>
   </section>
@@ -375,6 +397,27 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
   <label id="adj-count-wrap" hidden>Actual count on hand<input name="counted" inputmode="decimal" placeholder="0"><span class="hint" id="adj-count-hint"></span></label>
   <label>Note (optional)<input name="note" maxlength="100"></label>
   <div class="err" id="adjust-err"></div>
+  <div class="row"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save</button></div>
+</form></dialog>
+
+<dialog id="dlg-count"><form id="f-count">
+  <h2 id="count-title">Count the till</h2>
+  <p class="small muted" id="count-help" style="margin:0"></p>
+  <div class="denoms" id="denom-grid"></div>
+  <div class="ctotal"><span>Counted</span><span class="num" id="count-total">$0.00</span></div>
+  <div class="vbox" id="count-var" hidden></div>
+  <div class="err" id="count-err"></div>
+  <div class="row"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary" id="count-submit">Save</button></div>
+</form></dialog>
+
+<dialog id="dlg-move"><form id="f-move">
+  <h2>Cash in / out</h2>
+  <p class="small muted" style="margin:0">Record money that goes into or out of the drawer other than sales, so the till still balances.</p>
+  <label>What happened?
+    <select name="kind"><option value="out">Cash out: paid for supplies, safe drop, refund…</option><option value="in">Cash in: added change, deposit from the bank…</option></select></label>
+  <label>Amount ($)<input name="amount" inputmode="decimal" required placeholder="12.50"></label>
+  <label>Note<input name="note" maxlength="90" placeholder="Bag of ice"></label>
+  <div class="err" id="move-err"></div>
   <div class="row"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save</button></div>
 </form></dialog>
 
@@ -443,6 +486,7 @@ function showTab(name) {
   $$("main > section").forEach(s => s.hidden = s.id !== name);
   $("#mobilebar").hidden = !(name === "register" && cart.size);
   if (name === "inventory") renderInventory();
+  if (name === "till") loadTill();
   if (name === "sales") loadSales();
   if (name === "reports") { fillEventSelect($("#repevent"), true); loadReport(); }
   try { history.replaceState(null, "", "#" + name); } catch (e) {}
@@ -505,6 +549,8 @@ function renderRegister() {
     (backupDue() ? `<div class="banner"><div><b>Time for a backup.</b> ${S.sales_since_backup} sale${S.sales_since_backup === 1 ? "" : "s"} exist only on this iPad.</div><span class="spacer"></span><button class="btn sm primary" id="backupbanner">Back up now</button></div>` : "");
   const se = $("#startev"); if (se) se.onclick = openEvents;
   const bb = $("#backupbanner"); if (bb) bb.onclick = doBackup;
+  $("#tillchip").innerHTML = S.till ? `<div class="chips"><button class="chip" id="tillgo" title="Open the Till tab">💵 Till should hold ${money(S.till.expected)}</button></div>` : "";
+  const tg = $("#tillgo"); if (tg) tg.onclick = () => showTab("till");
   const cats = ["All", ...new Set(items.map(i => i.category))];
   if (!cats.includes(catFilter)) catFilter = "All";
   $("#chips").innerHTML = cats.length > 2 ? cats.map(c => `<button class="chip" aria-pressed="${c === catFilter}" data-cat="${esc(c)}">${esc(c)}</button>`).join("") : "";
@@ -898,6 +944,95 @@ document.addEventListener("pointerdown", placeTip);
 document.addEventListener("pointerleave", () => tip.style.display = "none");
 document.addEventListener("scroll", () => tip.style.display = "none", { passive: true });
 
+/* ---------- till ---------- */
+const DENOMS = [["10000", "$100 bills", 100], ["5000", "$50 bills", 50], ["2000", "$20 bills", 20], ["1000", "$10 bills", 10], ["500", "$5 bills", 5], ["100", "$1 bills", 1],
+  ["25", "Quarters", .25], ["10", "Dimes", .10], ["5", "Nickels", .05], ["1", "Pennies", .01]];
+let TILL = null;
+const timeOf = ts => new Date(ts.replace(" ", "T")).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const dayOf = ts => new Date(ts.replace(" ", "T")).toLocaleDateString([], { month: "short", day: "numeric" });
+function vlabel(v) { return v === 0 ? "✓ Balanced" : v > 0 ? `▲ Over ${money(v)}` : `▼ Short ${money(-v)}`; }
+function denomText(d) { const parts = DENOMS.filter(([k]) => d[k]).map(([k, , v]) => `${d[k]}×${v >= 1 ? "$" + v : Math.round(v * 100) + "¢"}`); return parts.join("  ") || "nothing counted"; }
+async function loadTill() { try { TILL = await api("/api/till"); renderTill(); } catch (err) { $("#tillbody").innerHTML = `<div class="card empty">${esc(err.message)}</div>`; } }
+function renderTill() {
+  const o = TILL.open, h = TILL.history;
+  let html = "";
+  if (!o) {
+    html += `<div class="card empty"><h2>The till is closed</h2><p>Count your starting change by bill and coin, then open the till. The app adds up cash sales for you and tells you at the end whether the drawer is over or short.</p>
+      <p class="small muted">${S.active_event ? "It will be linked to " + esc(S.active_event.name) + "." : "No event is running; you can start one from the pill at the top."}</p>
+      <button class="btn primary" id="till-open">Count starting cash &amp; open till</button></div>`;
+  } else {
+    const kp = (k, v, s) => `<div class="kpi"><div class="k">${k}</div><div class="v num">${v}</div><div class="s">${s || ""}</div></div>`;
+    const acts = [...o.counts.map(c => ({ ts: c.ts, c })), ...o.moves.map(m => ({ ts: m.ts, m }))].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+    html += `<div class="row" style="margin-bottom:12px"><div><h2>Till open</h2><div class="small muted">since ${timeOf(o.opened_ts)}${o.event_name ? " · " + esc(o.event_name) : ""}</div></div><span class="spacer"></span>
+        <button class="btn" id="till-move">Cash in / out</button><button class="btn" id="till-check">Count the till</button><button class="btn primary" id="till-close">Close till…</button></div>
+      <div class="kpis">${kp("Starting float", money(o.opening_total))}${kp("Cash sales", money(o.cash_sales), "cash payments only")}${kp("Cash in / out", `${money(o.cash_in)} / ${money(o.cash_out)}`)}${kp("Drawer should hold", money(o.expected), "float + cash sales + in − out")}</div>
+      <div class="card" style="margin-bottom:16px"><h3 style="margin-bottom:6px">Activity</h3>${acts.map(a => {
+        if (a.c) { const c = a.c, label = c.kind === "open" ? "Opened with" : "Counted";
+          return `<div class="act"><span class="small muted">${timeOf(c.ts)}</span><div><b>${label} ${money(c.total)}</b><div class="small muted">${esc(denomText(c.denoms))}</div></div><span class="badge">${c.kind === "open" ? "float" : "check"}</span><span>${c.variance !== undefined ? `<b class="${c.variance < 0 ? "low-flag" : ""}">${vlabel(c.variance)}</b>` : ""}</span></div>`; }
+        const m = a.m; return `<div class="act"><span class="small muted">${timeOf(m.ts)}</span><div><b>Cash ${m.kind} ${money(m.amount)}</b><div class="small muted">${esc(m.note || "")}</div></div><span class="badge">${m.kind === "in" ? "paid in" : "paid out"}</span><button class="btn sm danger" data-delmove="${m.id}">Remove</button></div>`;
+      }).join("")}</div>`;
+  }
+  if (h.length) {
+    const net = h.reduce((a, t) => a + (t.variance || 0), 0);
+    html += `<div class="row" style="margin:6px 0 8px"><h3>Past tills</h3><span class="spacer"></span><span class="small muted">Over/short across these ${h.length}: <b>${net === 0 ? "even" : (net > 0 ? "+" : "−") + money(Math.abs(net))}</b></span></div>
+      <div class="tablewrap"><table><thead><tr><th>Date</th><th>Event</th><th class="r">Float</th><th class="r">Cash sales</th><th class="r">In / out</th><th class="r">Expected</th><th class="r">Counted</th><th>Over / short</th><th class="r">Deposit</th></tr></thead><tbody>` +
+      h.map(t => `<tr><td>${dayOf(t.opened_ts)}</td><td>${esc(t.event_name || "—")}</td><td class="r num">${money(t.opening_total)}</td><td class="r num">${money(t.cash_sales)}</td><td class="r num">${money(t.cash_in)} / ${money(t.cash_out)}</td><td class="r num">${money(t.expected)}</td><td class="r num">${money(t.counted)}</td><td><b class="${t.variance < 0 ? "low-flag" : ""}">${vlabel(t.variance)}</b></td><td class="r num">${money(t.deposit)}</td></tr>`).join("") +
+      `</tbody></table></div><p class="small muted">Deposit = what you counted minus the float you started with, which you keep for next time.</p>`;
+  }
+  $("#tillbody").innerHTML = html;
+  const on = (id, fn) => { const b = $(id); if (b) b.onclick = fn; };
+  on("#till-open", () => openCount("open")); on("#till-check", () => openCount("check")); on("#till-close", () => openCount("close")); on("#till-move", openMove);
+  $$("[data-delmove]").forEach(b => b.onclick = async () => { if (!confirm("Remove this cash in/out entry?")) return; try { await api(`/api/till/moves/${b.dataset.delmove}/delete`, {}); await refresh(); loadTill(); } catch (err) { toast(err.message); } });
+}
+let countMode = "open", counts = {};
+const COUNT_TEXT = {
+  open: ["Open the till", "Count every bill and coin in the drawer to start. This is your float.", "Open till"],
+  check: ["Count the till", "Count what is in the drawer now. This does not close the till. It just checks you against what it should hold.", "Save count"],
+  close: ["Close the till", "Count everything in the drawer at the end of the night.", "Close till"],
+};
+function openCount(mode) {
+  countMode = mode; counts = {}; DENOMS.forEach(([k]) => counts[k] = 0);
+  const [title, help, btn] = COUNT_TEXT[mode];
+  $("#count-title").textContent = title; $("#count-help").textContent = help; $("#count-submit").textContent = btn; $("#count-err").textContent = "";
+  $("#denom-grid").innerHTML = DENOMS.map(([k, label, v]) => `<div class="drow"><div class="dl">${label}<br><small>${v >= 1 ? "$" + v : Math.round(v * 100) + "¢"} each</small></div>
+    <div class="stepper"><button type="button" data-d="${k}" data-by="-1" aria-label="One fewer">−</button><input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" data-di="${k}" value="0" aria-label="${label}"><button type="button" data-d="${k}" data-by="1" aria-label="One more">+</button></div>
+    <div class="ds num" id="ds-${k}">$0.00</div></div>`).join("");
+  updateCount(); $("#dlg-count").showModal();
+}
+function countTotal() { return DENOMS.reduce((a, [k, , v]) => a + Math.round(v * 100) * (counts[k] || 0), 0) / 100; }
+function updateCount() {
+  DENOMS.forEach(([k, , v]) => { $("#ds-" + k).textContent = money(v * (counts[k] || 0)); });
+  const total = countTotal(); $("#count-total").textContent = money(total);
+  const vb = $("#count-var"), o = TILL && TILL.open;
+  if (countMode === "open" || !o) { vb.hidden = true; return; }
+  const v = Math.round((total - o.expected) * 100) / 100;
+  vb.hidden = false; vb.className = "vbox" + (v < 0 ? " bad" : "");
+  vb.innerHTML = `Should hold ${money(o.expected)} · <b>${vlabel(v)}</b>` + (countMode === "close" ? `<div class="small" style="font-weight:500">Keep ${money(o.opening_total)} as next float, deposit <b>${money(Math.round((total - o.opening_total) * 100) / 100)}</b>.</div>` : "");
+}
+$("#denom-grid").addEventListener("click", e => {
+  const b = e.target.closest("[data-d]"); if (!b) return;
+  const k = b.dataset.d; counts[k] = Math.max(0, (counts[k] || 0) + +b.dataset.by); $(`[data-di="${k}"]`).value = counts[k]; updateCount();
+});
+$("#denom-grid").addEventListener("input", e => { const i = e.target.closest("[data-di]"); if (!i) return; const n = Math.floor(+i.value); counts[i.dataset.di] = n >= 0 && isFinite(n) ? n : 0; updateCount(); });
+$("#denom-grid").addEventListener("focusin", e => { if (e.target.matches("[data-di]")) e.target.select(); });
+$("#f-count").addEventListener("submit", async e => {
+  e.preventDefault();
+  try {
+    if (countMode === "open") await api("/api/till/open", { denoms: counts });
+    else await api("/api/till/count", { kind: countMode, denoms: counts });
+    const wasClose = countMode === "close";
+    $("#dlg-count").close(); await refresh(); await loadTill();
+    if (wasClose) { const t = TILL.history[0]; toast(`Till closed: ${vlabel(t.variance).replace(/^\S+ /, "")}. Deposit ${money(t.deposit)}, keeping ${money(t.opening_total)} as float.`, 8000); }
+    else toast(countMode === "open" ? "Till opened. Sales will add up automatically." : "Count saved");
+  } catch (err) { $("#count-err").textContent = err.message; }
+});
+function openMove() { $("#f-move").reset(); $("#move-err").textContent = ""; $("#dlg-move").showModal(); }
+$("#f-move").addEventListener("submit", async e => {
+  e.preventDefault(); const f = e.target;
+  try { await api("/api/till/move", { kind: f.kind.value, amount: f.amount.value, note: f.note.value }); $("#dlg-move").close(); await refresh(); loadTill(); toast("Saved"); }
+  catch (err) { $("#move-err").textContent = err.message; }
+});
+
 /* ---------- data tab (exports, and backup/restore for the on-device build) ---------- */
 document.addEventListener("click", async e => {
   const a = e.target.closest("[data-export]");
@@ -932,7 +1067,7 @@ if (LOCAL) {
 (async function () {
   try { await refresh(); } catch (e) { toast(e.message, 8000); }
   const h = location.hash.slice(1);
-  if (["register", "inventory", "sales", "reports", "data"].includes(h)) showTab(h);
+  if (["register", "till", "inventory", "sales", "reports", "data"].includes(h)) showTab(h);
 })();
 </script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});</script>

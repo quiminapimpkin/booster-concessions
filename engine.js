@@ -4,7 +4,7 @@
  */
 "use strict";
 (function () {
-  const BUILD = "2026.10.04-1512";
+  const BUILD = "2026.10.04-1557";
   const PAYMENTS = ["cash", "card", "other"];
   const SAMPLE_MENU = [
     ["Hot Dog", "Food", 3.0, 0.85, 0, 20], ["Nachos", "Food", 3.5, 1.05, 0, 15], ["Pretzel", "Food", 3.0, 0.9, 0, 10],
@@ -38,10 +38,10 @@
 
   /* ---------------- storage ---------------- */
   let DB = null, storage = "indexeddb", chain = Promise.resolve();
-  const emptyDB = () => ({ app: "booster-concessions", version: 1, seq: {}, items: [], events: [], sales: [], lines: [], moves: [], meta: { lastBackup: null } });
+  const emptyDB = () => ({ app: "booster-concessions", version: 1, seq: {}, items: [], events: [], sales: [], lines: [], moves: [], tills: [], till_counts: [], till_moves: [], meta: { lastBackup: null } });
   function reseq() {
     const mx = a => a.reduce((m, r) => Math.max(m, r.id), 0);
-    DB.seq = { item: mx(DB.items), event: mx(DB.events), sale: mx(DB.sales), line: mx(DB.lines), move: mx(DB.moves) };
+    DB.seq = { item: mx(DB.items), event: mx(DB.events), sale: mx(DB.sales), line: mx(DB.lines), move: mx(DB.moves), till: mx(DB.tills), tcount: mx(DB.till_counts), tmove: mx(DB.till_moves) };
   }
   const nid = k => ++DB.seq[k];
   function idbOpen() {
@@ -68,6 +68,7 @@
     }
     try { DB = raw ? JSON.parse(raw) : emptyDB(); } catch (e) { DB = emptyDB(); }
     if (!DB.meta) DB.meta = { lastBackup: null };
+    for (const k of ["tills", "till_counts", "till_moves"]) if (!Array.isArray(DB[k])) DB[k] = [];
     reseq();
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   }
@@ -98,7 +99,7 @@
       return { ...e, sales_count: ss.length, revenue: ss.reduce((a, s) => a + s.total, 0) };
     }).sort((a, b) => cmp(b.date, a.date) || b.id - a.id);
     const act = activeEvent();
-    return { items, events, active_event: act ? { ...act } : null, today: todayStr(), local: true, build: BUILD, storage, ...lastBackupInfo() };
+    return { items, events, active_event: act ? { ...act } : null, today: todayStr(), local: true, build: BUILD, storage, till: tillSummary(), ...lastBackupInfo() };
   }
 
   function createItem(body) {
@@ -224,6 +225,79 @@
     DB.events.forEach(e => e.active = e.id === id ? 1 : 0);
   }
 
+  /* ---------------- cash till ---------------- */
+  const DENOMS = ["10000", "5000", "2000", "1000", "500", "100", "25", "10", "5", "1"]; // cents per bill/coin
+  const FAR_FUTURE = "9999-12-31 23:59:59";
+  function parseDenoms(body) {
+    const d = body.denoms;
+    if (!d || typeof d !== "object" || Array.isArray(d)) bad("Enter how many of each bill and coin you have");
+    const out = {}; let cents = 0;
+    for (const k of DENOMS) {
+      const raw = d[k], f = Number(raw === undefined || raw === null || raw === "" ? 0 : raw);
+      if (!Number.isFinite(f) || f < 0 || f > 100000 || f !== Math.floor(f)) bad("Counts must be whole numbers, 0 or more");
+      out[k] = f; cents += Number(k) * f;
+    }
+    if (Object.keys(d).some(k => !DENOMS.includes(k))) bad("Unknown bill or coin");
+    return [out, cents / 100];
+  }
+  const openTillRow = () => DB.tills.filter(t => !t.closed_ts).sort((a, b) => b.id - a.id)[0] || null;
+  function tillSums(sess, upto) {
+    let cash = 0, ins = 0, outs = 0;
+    for (const s of DB.sales) if (s.payment === "cash" && !s.voided && s.ts >= sess.opened_ts && s.ts <= upto) cash += s.total;
+    for (const m of DB.till_moves) if (m.session_id === sess.id && m.ts <= upto) { if (m.kind === "in") ins += m.amount; else if (m.kind === "out") outs += m.amount; }
+    return [money(cash), money(ins), money(outs)];
+  }
+  function tillView(sess) {
+    const counts = DB.till_counts.filter(c => c.session_id === sess.id).sort((a, b) => a.id - b.id);
+    const op = counts.find(c => c.kind === "open"), opening = op ? op.total : 0;
+    const [cash, ins, outs] = tillSums(sess, sess.closed_ts || FAR_FUTURE);
+    const ev = sess.event_id !== null && sess.event_id !== undefined ? DB.events.find(e => e.id === sess.event_id) : null;
+    const cnts = counts.map(c => {
+      const item = { id: c.id, ts: c.ts, kind: c.kind, denoms: c.denoms, total: c.total };
+      if (c.kind !== "open") { const [cs, i, o] = tillSums(sess, c.ts); item.expected = money(opening + cs + i - o); item.variance = money(c.total - item.expected); }
+      return item;
+    });
+    const close = cnts.find(c => c.kind === "close");
+    const moves = DB.till_moves.filter(m => m.session_id === sess.id).sort((a, b) => cmp(a.ts, b.ts) || a.id - b.id).map(m => ({ id: m.id, ts: m.ts, kind: m.kind, amount: m.amount, note: m.note }));
+    return { id: sess.id, event_id: sess.event_id ?? null, event_name: ev ? ev.name : null, opened_ts: sess.opened_ts, closed_ts: sess.closed_ts || null,
+      opening_total: opening, cash_sales: cash, cash_in: ins, cash_out: outs, expected: money(opening + cash + ins - outs), counts: cnts, moves,
+      counted: close ? close.total : null, variance: close ? close.variance : null, deposit: close ? money(close.total - opening) : null };
+  }
+  function tillSummary() {
+    const sess = openTillRow(); if (!sess) return null;
+    const v = tillView(sess); return { id: v.id, opened_ts: v.opened_ts, expected: v.expected };
+  }
+  function tillState() {
+    const sess = openTillRow();
+    const closed = DB.tills.filter(t => t.closed_ts).sort((a, b) => b.id - a.id).slice(0, 20);
+    return { open: sess ? tillView(sess) : null, history: closed.map(tillView) };
+  }
+  function openTill(body) {
+    if (openTillRow()) bad("A till is already open. Close it first.");
+    const [denoms, total] = parseDenoms(body), ev = activeEvent(), ts = nowStr(), id = nid("till");
+    DB.tills.push({ id, event_id: ev ? ev.id : null, opened_ts: ts, closed_ts: null });
+    DB.till_counts.push({ id: nid("tcount"), session_id: id, ts, kind: "open", denoms, total });
+    return id;
+  }
+  function countTill(body) {
+    const sess = openTillRow() || bad("No till is open");
+    if (!["check", "close"].includes(body.kind)) bad("Unknown count type");
+    const [denoms, total] = parseDenoms(body), ts = nowStr();
+    DB.till_counts.push({ id: nid("tcount"), session_id: sess.id, ts, kind: body.kind, denoms, total });
+    if (body.kind === "close") sess.closed_ts = ts;
+  }
+  function tillMove(body) {
+    const sess = openTillRow() || bad("Open the till first");
+    if (!["in", "out"].includes(body.kind)) bad("Choose cash in or cash out");
+    const amount = money(num(body, "amount", { min: 0.01, max: 100000 }));
+    DB.till_moves.push({ id: nid("tmove"), session_id: sess.id, ts: nowStr(), kind: body.kind, amount, note: text(body, "note", { max: 100, req: false }) });
+  }
+  function deleteTillMove(id) {
+    const sess = openTillRow(), row = DB.till_moves.find(m => m.id === id);
+    if (!row || !sess || row.session_id !== sess.id) bad("That entry can only be removed while its till is open");
+    DB.till_moves = DB.till_moves.filter(m => m.id !== id);
+  }
+
   /* ---------------- reports ---------------- */
   function trendOf(ser) {
     const n = ser.length;
@@ -327,6 +401,11 @@
     if (kind === "moves") {
       return csv(["time", "item", "type", "qty_change", "amount", "note"], DB.moves.map(m => [m.ts, itemName.get(m.item_id), m.kind, m.qty, m.amount, m.note]));
     }
+    if (kind === "till") {
+      return csv(["till_id", "event", "opened", "closed", "opening_float", "cash_sales", "paid_in", "paid_out", "expected", "counted", "over_short", "deposit_after_float"],
+        DB.tills.slice().sort((a, b) => a.id - b.id).map(t => { const v = tillView(t);
+          return [v.id, v.event_name || "", v.opened_ts, v.closed_ts || "", v.opening_total, v.cash_sales, v.cash_in, v.cash_out, v.expected, v.counted ?? "", v.variance ?? "", v.deposit ?? ""]; }));
+    }
     bad("Unknown export");
   }
   async function saveFile(name, mime, content) {
@@ -349,7 +428,7 @@
       if (ok) { DB.meta.lastBackup = nowStr(); await save(); }
       return ok;
     }
-    const names = { sales: `sales-${stamp}.csv`, inventory: `inventory-${stamp}.csv`, moves: `stock-history-${stamp}.csv` };
+    const names = { sales: `sales-${stamp}.csv`, inventory: `inventory-${stamp}.csv`, moves: `stock-history-${stamp}.csv`, till: `till-${stamp}.csv` };
     return saveFile(names[kind], "text/csv", exportCsv(kind));
   }
   function shiftDate(s, days) {
@@ -359,14 +438,20 @@
   function restoreFrom(textJson, shiftToToday) {
     let o; try { o = JSON.parse(textJson); } catch (e) { bad("That file isn't a valid backup."); }
     if (!o || o.app !== "booster-concessions" || !["items", "events", "sales", "lines", "moves"].every(k => Array.isArray(o[k]))) bad("That file isn't a Booster Club backup.");
-    const next = { app: o.app, version: 1, seq: {}, items: o.items, events: o.events, sales: o.sales, lines: o.lines, moves: o.moves, meta: { lastBackup: null } };
+    const next = { app: o.app, version: 1, seq: {}, items: o.items, events: o.events, sales: o.sales, lines: o.lines, moves: o.moves, meta: { lastBackup: null },
+      tills: Array.isArray(o.tills) ? o.tills : [], till_counts: Array.isArray(o.till_counts) ? o.till_counts : [], till_moves: Array.isArray(o.till_moves) ? o.till_moves : [] };
+    next.till_counts.forEach(c => { if (typeof c.denoms === "string") { try { c.denoms = JSON.parse(c.denoms); } catch (e) { c.denoms = {}; } } });
     if (shiftToToday && next.events.length) {
       const last = next.events.reduce((m, e) => (e.date > m ? e.date : m), "0000-00-00");
-      const days = Math.round((new Date(todayStr() + "T12:00:00") - new Date(last + "T12:00:00")) / 864e5);
+      const target = shiftDate(todayStr(), -1); // the newest demo game becomes "yesterday"
+      const days = Math.round((new Date(target + "T12:00:00") - new Date(last + "T12:00:00")) / 864e5);
       next.events.forEach(e => e.date = shiftDate(e.date, days));
       next.sales.forEach(s => { s.ts = shiftDate(s.ts, days); if (s.void_ts) s.void_ts = shiftDate(s.void_ts, days); });
       next.moves.forEach(m => m.ts = shiftDate(m.ts, days));
       next.items.forEach(i => i.created = shiftDate(i.created, days));
+      next.tills.forEach(t => { t.opened_ts = shiftDate(t.opened_ts, days); if (t.closed_ts) t.closed_ts = shiftDate(t.closed_ts, days); });
+      next.till_counts.forEach(c => c.ts = shiftDate(c.ts, days));
+      next.till_moves.forEach(m => m.ts = shiftDate(m.ts, days));
     }
     DB = next; reseq();
   }
@@ -381,6 +466,7 @@
       if (p === "state") return getState();
       if (p === "report") return report(q);
       if (p === "sales") return listSales(q);
+      if (p === "till") return tillState();
       bad("Not found");
     }
     let r = { ok: true };
@@ -395,6 +481,10 @@
     }
     else if (p === "sales") r = createSale(body);
     else if (parts[0] === "sales" && parts[2] === "void") voidSale(id);
+    else if (p === "till/open") r = { id: openTill(body) };
+    else if (p === "till/count") countTill(body);
+    else if (p === "till/move") tillMove(body);
+    else if (parts[0] === "till" && parts[1] === "moves" && parts[3] === "delete") deleteTillMove(parseInt(parts[2], 10));
     else if (p === "events") r = { id: createEvent(body) };
     else if (parts[0] === "events" && parts[2] === "activate") activateEvent(id);
     else if (p === "events/end") DB.events.forEach(e => e.active = 0);
