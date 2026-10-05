@@ -332,6 +332,7 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
           <li><b>Gross profit</b> = revenue − cost of goods. <b>Margin</b> = gross profit ÷ revenue.</li>
           <li><b>Write-offs</b> = waste, spoilage, giveaways and count shortages, valued at cost. <b>Net profit</b> = gross profit − write-offs.</li>
           <li><b>Spent on stock</b> = money paid when you log a restock. <b>Cash result</b> = revenue − spent on stock, which is what the club actually kept for the period.</li>
+          <li><b>Open-price items</b> (like Donation) are counted as revenue with no cost. They aren’t tracked in inventory, don’t count toward combos, and aren’t part of the best-seller rankings.</li>
           <li>When you restock, the unit cost becomes a weighted average of the old stock and the new purchase.</li>
         </ul>
       </div>
@@ -369,12 +370,13 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
   <label>Name<input name="name" required maxlength="60" autocomplete="off"></label>
   <div class="two">
     <label>Category<input name="category" list="cats" maxlength="30" value="Food" autocomplete="off"><datalist id="cats"></datalist></label>
-    <label>Price ($)<input name="price" inputmode="decimal" required placeholder="3.00"></label>
+    <label id="pricewrap">Price ($)<input name="price" inputmode="decimal" required placeholder="3.00"></label>
   </div>
-  <div class="two">
+  <div class="two" id="costrow">
     <label>Cost per unit ($)<input name="cost" inputmode="decimal" placeholder="0.85"><span class="hint">A $24 case of 48 = $0.50 each</span></label>
     <label>Reorder when below<input name="reorder_level" inputmode="decimal" placeholder="20"><span class="hint">Shows a low-stock warning</span></label>
   </div>
+  <label id="openwrap" class="row" style="font-weight:500"><input type="checkbox" name="open_price" style="width:auto;min-height:0"> <span>Open price: the amount is keyed in at the register and nothing is counted in inventory (e.g. Donation)</span></label>
   <label id="startwrap">Starting stock on hand<input name="stock" inputmode="decimal" placeholder="0"></label>
   <label id="activewrap" class="row" style="font-weight:500"><input type="checkbox" name="active" style="width:auto;min-height:0" checked> On the menu (uncheck to retire it; sales history is kept)</label>
   <div class="err" id="item-err"></div>
@@ -405,6 +407,17 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
   <label>Note (optional)<input name="note" maxlength="100"></label>
   <div class="err" id="adjust-err"></div>
   <div class="row"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save</button></div>
+</form></dialog>
+
+<dialog id="dlg-amount"><form id="f-amount">
+  <h2 id="amount-title">Donation</h2>
+  <p class="small muted" style="margin:0">Tap an amount, or type one and tap Add to order.</p>
+  <div class="tender" id="amount-presets">
+    <button type="button" class="btn" data-amt="1">$1</button><button type="button" class="btn" data-amt="5">$5</button><button type="button" class="btn" data-amt="10">$10</button><button type="button" class="btn" data-amt="20">$20</button><button type="button" class="btn" data-amt="50">$50</button>
+  </div>
+  <label>Amount ($)<input id="amount-input" inputmode="decimal" autocomplete="off" placeholder="0.00" style="font-size:28px;text-align:center;min-height:56px;font-weight:700"></label>
+  <div class="err" id="amount-err"></div>
+  <div class="row"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Add to order</button></div>
 </form></dialog>
 
 <dialog id="dlg-count"><form id="f-count">
@@ -459,6 +472,8 @@ const longDate = s => new Date(s + "T12:00:00").toLocaleDateString(undefined, { 
 
 let S = { items: [], events: [], active_event: null };
 let cart = new Map();
+let openLines = [];           // open-price items in the current order (e.g. donations): [{uid, id, amount}]
+let openSeq = 0;
 let payMethod = "cash";
 let combos = 0;               // $1-off combo discounts applied to the current order (any 3 items = 1 combo)
 const COMBO_OFF = 1;
@@ -484,6 +499,7 @@ function toast(msg, ms = 3200) {
 async function refresh() {
   S = await api("/api/state");
   for (const [id] of cart) { const it = S.items.find(i => i.id === id); if (!it || !it.active) cart.delete(id); }
+  openLines = openLines.filter(l => S.items.some(i => i.id === l.id && i.active));
   renderHeader(); renderRegister();
   if (currentTab === "inventory") renderInventory();
 }
@@ -493,7 +509,7 @@ function showTab(name) {
   currentTab = name;
   $$("#nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
   $$("main > section").forEach(s => s.hidden = s.id !== name);
-  $("#mobilebar").hidden = !(name === "register" && cart.size);
+  $("#mobilebar").hidden = !(name === "register" && !cartEmpty());
   if (name === "inventory") renderInventory();
   if (name === "till") loadTill();
   if (name === "sales") loadSales();
@@ -550,9 +566,11 @@ $$("dialog").forEach(d => {
 
 /* ---------- register ---------- */
 function activeItems() { return S.items.filter(i => i.active); }
-function subtotal() { let t = 0; for (const [id, q] of cart) { const it = S.items.find(i => i.id === id); if (it) t += Math.round(it.price * q * 100); } return t / 100; }
+function normalSubtotal() { let t = 0; for (const [id, q] of cart) { const it = S.items.find(i => i.id === id); if (it) t += Math.round(it.price * q * 100); } return t / 100; }
+function subtotal() { return Math.round((normalSubtotal() + openLines.reduce((a, l) => a + Math.round(l.amount * 100), 0) / 100) * 100) / 100; }
+function cartEmpty() { return !cart.size && !openLines.length; }
 function itemCount() { let n = 0; for (const q of cart.values()) n += q; return n; }
-function maxCombos() { return Math.max(0, Math.min(Math.floor(itemCount() / 3), Math.floor(subtotal() / COMBO_OFF))); }
+function maxCombos() { return Math.max(0, Math.min(Math.floor(itemCount() / 3), Math.floor(normalSubtotal() / COMBO_OFF))); }  // donations don't count toward combos
 function cartTotal() { combos = Math.min(combos, maxCombos()); return Math.round((subtotal() - combos * COMBO_OFF) * 100) / 100; }
 function renderRegister() {
   const items = activeItems();
@@ -574,6 +592,10 @@ function renderRegister() {
     $("#goinv").onclick = () => { showTab("inventory"); $("#additem").click(); };
   } else {
     $("#tiles").innerHTML = shown.map(i => {
+      if (i.open_price) {
+        const oq = openLines.filter(l => l.id === i.id).length;
+        return `<button class="tile" data-id="${i.id}"><span class="nm">${esc(i.name)}</span><span class="pr" style="font-size:16px">Enter amount</span><span class="st">any amount</span>${oq ? `<span class="qty">${oq}</span>` : ""}</button>`;
+      }
       const q = cart.get(i.id) || 0;
       const low = i.stock <= i.reorder_level;
       const st = i.stock <= 0 ? "Out per count" : `${qtyFmt(i.stock)} left`;
@@ -585,18 +607,24 @@ function renderRegister() {
 $("#chips").addEventListener("click", e => { const b = e.target.closest("[data-cat]"); if (b) { catFilter = b.dataset.cat; renderRegister(); } });
 $("#tiles").addEventListener("click", e => {
   const b = e.target.closest(".tile"); if (!b) return;
-  const id = +b.dataset.id, it = S.items.find(i => i.id === id), n = (cart.get(id) || 0) + 1;
+  const id = +b.dataset.id, it = S.items.find(i => i.id === id);
+  if (it.open_price) { openAmount(it); return; }
+  const n = (cart.get(id) || 0) + 1;
   cart.set(id, n);
   if (it.stock - n < 0) toast(`${it.name}: your count says only ${qtyFmt(Math.max(it.stock, 0))} left`, 2000);
   renderRegister();
 });
 function renderCart() {
   const total = cartTotal();
-  $("#lines").innerHTML = cart.size ? [...cart].map(([id, q]) => {
+  $("#lines").innerHTML = !cartEmpty() ? [...cart].map(([id, q]) => {
     const it = S.items.find(i => i.id === id);
     return `<div class="line"><div><b>${esc(it.name)}</b><div class="small muted">${money(it.price)} each</div></div>
       <div class="stepper"><button data-dec="${id}" aria-label="Remove one">−</button><b class="num">${q}</b><button data-inc="${id}" aria-label="Add one">+</button></div>
       <b class="num">${money(it.price * q)}</b></div>`;
+  }).join("") + openLines.map(l => {
+    const it = S.items.find(i => i.id === l.id);
+    return `<div class="line"><div><b>${esc(it.name)}</b><div class="small muted">open amount</div></div>
+      <button class="btn sm" data-rmopen="${l.uid}" aria-label="Remove ${esc(it.name)}">Remove</button><b class="num">${money(l.amount)}</b></div>`;
   }).join("") : `<p class="muted">Tap items to add them to the order.</p>`;
   const n = itemCount(), mx = maxCombos();
   let comboHtml = "";
@@ -617,14 +645,16 @@ function renderCart() {
     ch.className = "change" + (d < 0 ? " bad" : ""); ch.textContent = d < 0 ? `Needs ${money(-d)} more` : `Change due: ${money(d)}`;
   } else { ch.textContent = ""; ch.className = "change"; }
   const cashOk = payMethod !== "cash" || isNaN(rec) || rec + 1e-9 >= total;
-  $("#charge").disabled = !cart.size || !cashOk;
-  $("#charge").textContent = cart.size ? `Complete sale · ${money(total)}` : "Complete sale";
-  const count = [...cart.values()].reduce((a, b) => a + b, 0);
+  $("#charge").disabled = cartEmpty() || !cashOk;
+  $("#charge").textContent = !cartEmpty() ? `Complete sale · ${money(total)}` : "Complete sale";
+  const count = itemCount() + openLines.length;
   $("#mbcount").textContent = `${count} item${count === 1 ? "" : "s"}`; $("#mbtotal").textContent = money(total) + "  ›";
-  $("#mobilebar").hidden = !(currentTab === "register" && cart.size);
+  $("#mobilebar").hidden = !(currentTab === "register" && !cartEmpty());
   $("#undo").hidden = !lastSaleId;
 }
 $("#lines").addEventListener("click", e => {
+  const rm = e.target.closest("[data-rmopen]");
+  if (rm) { openLines = openLines.filter(l => l.uid !== +rm.dataset.rmopen); renderRegister(); return; }
   const inc = e.target.closest("[data-inc]"), dec = e.target.closest("[data-dec]");
   if (inc) cart.set(+inc.dataset.inc, cart.get(+inc.dataset.inc) + 1);
   if (dec) { const id = +dec.dataset.dec, n = cart.get(id) - 1; n > 0 ? cart.set(id, n) : cart.delete(id); }
@@ -637,17 +667,17 @@ $("#combobox").addEventListener("click", e => {
 $("#pay").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { payMethod = b.dataset.pay; renderCart(); } });
 $("#tender").addEventListener("click", e => { const b = e.target.closest("[data-tender]"); if (b) { $("#tendered").value = (+b.dataset.tender).toFixed(2); renderCart(); } });
 $("#tendered").addEventListener("input", renderCart);
-$("#clear").onclick = () => { cart.clear(); combos = 0; $("#tendered").value = ""; renderRegister(); };
+$("#clear").onclick = () => { cart.clear(); openLines = []; combos = 0; $("#tendered").value = ""; renderRegister(); };
 $("#mobilebar").onclick = () => $("#cart").scrollIntoView({ behavior: "smooth", block: "start" });
 $("#charge").onclick = async () => {
   const btn = $("#charge"); btn.disabled = true;
   try {
     const rec = parseFloat($("#tendered").value);
     const r = await api("/api/sales", {
-      items: [...cart].map(([id, qty]) => ({ id, qty })), payment: payMethod, combos,
+      items: [...[...cart].map(([id, qty]) => ({ id, qty })), ...openLines.map(l => ({ id: l.id, qty: 1, price: l.amount }))], payment: payMethod, combos,
       tendered: payMethod === "cash" ? (isNaN(rec) ? cartTotal() : rec) : null,
     });
-    lastSaleId = r.id; cart.clear(); combos = 0; $("#tendered").value = "";
+    lastSaleId = r.id; cart.clear(); openLines = []; combos = 0; $("#tendered").value = "";
     await refresh();
     toast(payMethod === "cash" && r.change > 0 ? `Sale #${r.id} ${money(r.total)} · give ${money(r.change)} change` : `Sale #${r.id} saved · ${money(r.total)}`, 4500);
   } catch (err) { toast(err.message); renderCart(); }
@@ -657,6 +687,21 @@ $("#undo").onclick = async () => {
   try { await api(`/api/sales/${lastSaleId}/void`, {}); toast(`Sale #${lastSaleId} voided`); lastSaleId = null; await refresh(); }
   catch (err) { toast(err.message); lastSaleId = null; renderCart(); }
 };
+
+/* ---------- open-price items (donations) ---------- */
+let amountItem = null;
+function openAmount(it) {
+  amountItem = it; $("#amount-title").textContent = it.name; $("#amount-input").value = ""; $("#amount-err").textContent = "";
+  $("#dlg-amount").showModal(); setTimeout(() => $("#amount-input").focus(), 60);
+}
+function addOpenLine(amount) { openLines.push({ uid: ++openSeq, id: amountItem.id, amount }); $("#dlg-amount").close(); renderRegister(); }
+$("#amount-presets").addEventListener("click", e => { const b = e.target.closest("[data-amt]"); if (b) addOpenLine(+b.dataset.amt); });
+$("#f-amount").addEventListener("submit", e => {
+  e.preventDefault();
+  const v = Math.round(parseFloat($("#amount-input").value.replace(/[^0-9.]/g, "")) * 100) / 100;
+  if (!(v > 0) || v > 10000) { $("#amount-err").textContent = "Enter an amount greater than $0."; return; }
+  addOpenLine(v);
+});
 
 /* ---------- inventory ---------- */
 function renderInventory() {
@@ -675,6 +720,7 @@ function renderInventory() {
   if (!items.length) { $("#invtable").innerHTML = `<tbody><tr><td class="empty">No items yet. Tap “+ Add item”, or load a sample menu from the Register tab.</td></tr></tbody>`; return; }
   $("#invtable").innerHTML = `<thead><tr><th>Item</th><th>Category</th><th class="r">Price</th><th class="r">Unit cost</th><th class="r">Profit each</th><th class="r">Margin</th><th class="r">On hand</th><th class="r">Reorder at</th><th class="r">Stock value</th><th></th></tr></thead><tbody>` +
     items.map(i => {
+      if (i.open_price) return `<tr class="${i.active ? "" : "archived"}"><td><b>${esc(i.name)}</b>${i.active ? "" : ' <span class="badge">retired</span>'}</td><td>${esc(i.category)}</td><td class="r" colspan="7"><span class="badge">open price</span> <span class="muted small">amount keyed in at the register · not tracked in inventory</span></td><td class="right"><button class="btn sm" data-edit="${i.id}">Edit</button></td></tr>`;
       const p = i.price - i.cost, m = i.price ? p / i.price * 100 : 0;
       const isLow = i.active && i.reorder_level > 0 && i.stock <= i.reorder_level;
       return `<tr class="${i.active ? "" : "archived"}"><td><b>${esc(i.name)}</b>${i.active ? "" : ' <span class="badge">retired</span>'}</td><td>${esc(i.category)}</td>
@@ -691,16 +737,24 @@ $("#invtable").addEventListener("click", e => {
 });
 $("#additem").onclick = () => openItem(null);
 let editing = null;
+function syncOpenFields() {
+  const f = $("#f-item"), open = editing ? !!editing.open_price : f.open_price.checked;
+  $("#pricewrap").hidden = $("#costrow").hidden = open; $("#startwrap").hidden = open || !!editing;
+  f.price.required = !open;
+  if (!editing && open && f.category.value === "Food") f.category.value = "Other";
+}
+$("#f-item").open_price.addEventListener("change", syncOpenFields);
 function openItem(it) {
   editing = it; const f = $("#f-item"); f.reset();
   $("#item-title").textContent = it ? `Edit ${it.name}` : "Add item";
-  $("#startwrap").hidden = !!it; $("#activewrap").hidden = !it;
+  $("#activewrap").hidden = !it; $("#openwrap").hidden = !!it; syncOpenFields();
   if (it) { f.name.value = it.name; f.category.value = it.category; f.price.value = it.price; f.cost.value = it.cost; f.reorder_level.value = it.reorder_level; f.active.checked = !!it.active; }
   $("#item-err").textContent = ""; $("#dlg-item").showModal(); f.name.focus();
 }
 $("#f-item").addEventListener("submit", async e => {
   e.preventDefault(); const f = e.target;
   const body = { name: f.name.value, category: f.category.value || "Food", price: f.price.value, cost: f.cost.value || 0, reorder_level: f.reorder_level.value || 0 };
+  if (!editing && f.open_price.checked) body.open_price = 1;
   try {
     if (editing) { body.active = f.active.checked; await api(`/api/items/${editing.id}`, body); }
     else { body.stock = f.stock.value || 0; await api("/api/items", body); }
@@ -752,7 +806,7 @@ async function loadSales() {
   if (!rows.length) { $("#salestable").innerHTML = `<tbody><tr><td class="empty">No sales yet.</td></tr></tbody>`; return; }
   $("#salestable").innerHTML = `<thead><tr><th>#</th><th>Time</th><th>Event</th><th>Items</th><th>Paid by</th><th class="r">Total</th><th class="r">Profit</th><th></th></tr></thead><tbody>` +
     rows.map(s => `<tr class="${s.voided ? "archived" : ""}"><td>${s.id}</td><td>${esc(s.ts.slice(5, 16).replace("-", "/"))}</td><td>${esc(s.event_name || "—")}</td>
-    <td style="white-space:normal;min-width:180px">${s.lines.map(l => `${l.qty}× ${esc(l.name)}`).join(", ")}${s.combos ? ` <span class="badge">combo ×${s.combos} −${money(s.discount)}</span>` : ""}</td><td>${esc(s.payment)}</td>
+    <td style="white-space:normal;min-width:180px">${s.lines.map(l => { const it = S.items.find(i => i.id === l.item_id); return it && it.open_price ? `${esc(l.name)} ${money(l.price)}` : `${l.qty}× ${esc(l.name)}`; }).join(", ")}${s.combos ? ` <span class="badge">combo ×${s.combos} −${money(s.discount)}</span>` : ""}</td><td>${esc(s.payment)}</td>
     <td class="r num">${money(s.total)}</td><td class="r num">${money(s.total - s.cogs)}</td>
     <td class="right">${s.voided ? '<span class="badge">voided</span>' : `<button class="btn sm danger" data-void="${s.id}">Void</button>`}</td></tr>`).join("") + `</tbody>`;
 }
@@ -813,6 +867,7 @@ function renderReport(R) {
     kp("Revenue", money(T.revenue), `${T.transactions} sales · avg ${money(T.avg_sale)}`),
     kp("Cost of goods", money(T.cogs), `${T.units} items sold`),
     kp("Gross profit", money(T.gross_profit), `margin ${pct(T.margin)}`),
+    ...(T.donation_count ? [kp("Donations &amp; open-price", money(T.donations), `${T.donation_count} entr${T.donation_count === 1 ? "y" : "ies"}, no cost`)] : []),
     ...(T.combos ? [kp("Combo discounts", money(T.discounts), `${T.combos} combo${T.combos === 1 ? "" : "s"} given`)] : []),
     kp("Waste &amp; shrink", money(T.writeoffs), "valued at cost"),
     kp("Net profit", money(T.net_profit), "after write-offs"),
@@ -1072,18 +1127,18 @@ if (LOCAL) {
   $("#restorefile").onchange = async e => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;
     if (!confirm("Restore from this backup? It REPLACES everything currently on this iPad.")) return;
-    try { await api("/api/local/restore", { json: await f.text() }); cart.clear(); lastSaleId = null; await refresh(); toast("Backup restored"); }
+    try { await api("/api/local/restore", { json: await f.text() }); cart.clear(); openLines = []; lastSaleId = null; await refresh(); toast("Backup restored"); }
     catch (err) { toast(err.message, 6000); }
   };
   $("#loaddemo").onclick = async () => {
     if (!confirm("Load made-up demo data for practice? It REPLACES everything on this iPad. Back up first if you have real data.")) return;
-    try { await api("/api/local/demo", {}); cart.clear(); lastSaleId = null; await refresh(); toast("Demo data loaded. Erase it before game day."); showTab("reports"); }
+    try { await api("/api/local/demo", {}); cart.clear(); openLines = []; lastSaleId = null; await refresh(); toast("Demo data loaded. Erase it before game day."); showTab("reports"); }
     catch (err) { toast(err.message, 6000); }
   };
   $("#eraseall").onclick = async () => {
     if (!confirm("Erase ALL items, sales and events on this iPad? This cannot be undone.")) return;
     if (!confirm("Really erase everything? Make sure you have a backup.")) return;
-    try { await api("/api/local/erase", {}); cart.clear(); lastSaleId = null; await refresh(); toast("Everything erased"); } catch (err) { toast(err.message); }
+    try { await api("/api/local/erase", {}); cart.clear(); openLines = []; lastSaleId = null; await refresh(); toast("Everything erased"); } catch (err) { toast(err.message); }
   };
 }
 

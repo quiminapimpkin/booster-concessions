@@ -4,7 +4,7 @@
  */
 "use strict";
 (function () {
-  const BUILD = "2026.10.04-1649";
+  const BUILD = "2026.10.04-1953";
   const PAYMENTS = ["cash", "card", "other"];
   const SAMPLE_MENU = [
     ["Hot Dog", "Food", 3.0, 0.85, 0, 20], ["Nachos", "Food", 3.5, 1.05, 0, 15], ["Pretzel", "Food", 3.0, 0.9, 0, 10],
@@ -106,13 +106,15 @@
   function createItem(body) {
     const name = text(body, "name");
     if (DB.items.some(i => i.active && i.name.toLowerCase() === name.toLowerCase())) bad(`There is already an item named ${name}`);
-    const price = money(num(body, "price", { min: 0, max: 1000 }));
-    const cost = round(num(body, "cost", { def: 0, min: 0, max: 1000 }), 4);
-    const stock = num(body, "stock", { def: 0, min: 0, max: 100000 });
-    const reorder = num(body, "reorder_level", { def: 0, min: 0, max: 100000 });
+    const open = body.open_price ? 1 : 0;
+    // an open-price item (e.g. Donation) has its amount keyed in at the register: nothing to count or cost
+    const price = open ? 0 : money(num(body, "price", { min: 0, max: 1000 }));
+    const cost = open ? 0 : round(num(body, "cost", { def: 0, min: 0, max: 1000 }), 4);
+    const stock = open ? 0 : num(body, "stock", { def: 0, min: 0, max: 100000 });
+    const reorder = open ? 0 : num(body, "reorder_level", { def: 0, min: 0, max: 100000 });
     const category = text(body, "category", { max: 40, def: "Food" }) || "Food";
     const id = nid("item");
-    DB.items.push({ id, name, category, price, cost, stock, reorder_level: reorder, active: 1, created: nowStr() });
+    DB.items.push({ id, name, category, price, cost, stock, reorder_level: reorder, active: 1, created: nowStr(), open_price: open });
     if (stock) DB.moves.push({ id: nid("move"), ts: nowStr(), item_id: id, kind: "opening", qty: stock, amount: 0, note: "Starting stock", event_id: null });
     return id;
   }
@@ -122,13 +124,15 @@
     const active = "active" in body ? (body.active ? 1 : 0) : row.active;
     if (active && DB.items.some(i => i.active && i.id !== id && i.name.toLowerCase() === name.toLowerCase())) bad(`There is already an item named ${name}`);
     const category = text(body, "category", { max: 40, def: row.category }) || row.category;
-    const price = money(num(body, "price", { def: row.price, min: 0, max: 1000 }));
-    const cost = round(num(body, "cost", { def: row.cost, min: 0, max: 1000 }), 4);
-    const reorder = num(body, "reorder_level", { def: row.reorder_level, min: 0, max: 100000 });
+    const open = !!row.open_price;
+    const price = open ? 0 : money(num(body, "price", { def: row.price, min: 0, max: 1000 }));
+    const cost = open ? 0 : round(num(body, "cost", { def: row.cost, min: 0, max: 1000 }), 4);
+    const reorder = open ? 0 : num(body, "reorder_level", { def: row.reorder_level, min: 0, max: 100000 });
     Object.assign(row, { name, category, price, cost, reorder_level: reorder, active });
   }
   function restock(id, body) {
     const row = itemById(id) || bad("Item not found");
+    if (row.open_price) bad("Open-price items don't track stock");
     const qty = num(body, "qty", { min: 0.0001, max: 100000 });
     const total = money(num(body, "total_cost", { min: 0, max: 100000 }));
     const note = text(body, "note", { max: 120, req: false });
@@ -141,6 +145,7 @@
   }
   function adjust(id, body) {
     const row = itemById(id) || bad("Item not found");
+    if (row.open_price) bad("Open-price items don't track stock");
     const note = text(body, "note", { max: 120, req: false });
     const ev = activeEvent(), eid = ev ? ev.id : null;
     if (body.mode === "waste") {
@@ -169,25 +174,27 @@
     const lines = body.items;
     if (!Array.isArray(lines) || !lines.length) bad("The cart is empty");
     if (!PAYMENTS.includes(body.payment)) bad("Choose cash, card or other");
-    const merged = new Map();
+    // rows: [item, qty, price each]. Normal items merge by id; open-price items (donations) stay separate lines.
+    const rows = [], index = new Map();
     for (const ln of lines) {
       if (!ln || typeof ln !== "object") bad("Bad cart");
-      const iid = num(ln, "id", { int: true }), qty = num(ln, "qty", { min: 1, max: 999, int: true });
-      merged.set(iid, (merged.get(iid) || 0) + qty);
-    }
-    const rows = []; let total = 0;
-    for (const [iid, qty] of merged) {
-      const it = itemById(iid);
+      const iid = num(ln, "id", { int: true }), it = itemById(iid);
       if (!it || !it.active) bad("An item in the cart is no longer on the menu");
-      rows.push([it, qty]); total += money(it.price * qty);
+      if (it.open_price) rows.push([it, 1, money(num(ln, "price", { min: 0.01, max: 10000 }))]);
+      else {
+        const qty = num(ln, "qty", { min: 1, max: 999, int: true });
+        if (index.has(iid)) rows[index.get(iid)][1] += qty;
+        else { index.set(iid, rows.length); rows.push([it, qty, it.price]); }
+      }
     }
-    total = money(total);
+    let total = money(rows.reduce((a, [, q, p]) => a + money(p * q), 0));
+    const normal = rows.filter(r => !r[0].open_price);
     const combos = num(body, "combos", { def: 0, min: 0, max: 999, int: true });
-    const units = rows.reduce((a, [, q]) => a + q, 0);
-    if (combos > Math.floor(units / 3)) bad("A combo needs 3 items. Add more items or remove a combo discount.");
+    if (combos > Math.floor(normal.reduce((a, r) => a + r[1], 0) / 3)) bad("A combo needs 3 items. Add more items or remove a combo discount.");
     const discount = money(combos * COMBO_DISCOUNT);
-    if (discount > total + 1e-9) bad("The combo discount is larger than the order");
-    const alloc = allocateDiscount(rows.map(([it, q]) => Math.round(money(it.price * q) * 100)), Math.round(discount * 100));
+    if (discount > money(normal.reduce((a, [, q, p]) => a + money(p * q), 0)) + 1e-9) bad("The combo discount is larger than the order");
+    const shares = allocateDiscount(normal.map(([, q, p]) => Math.round(money(p * q) * 100)), Math.round(discount * 100));
+    let k = 0; const alloc = rows.map(r => (r[0].open_price ? 0 : shares[k++]));
     total = money(total - discount);
     let tendered = null;
     if (body.payment === "cash") {
@@ -196,9 +203,9 @@
     }
     const ev = activeEvent(), sid = nid("sale");
     DB.sales.push({ id: sid, ts: nowStr(), event_id: ev ? ev.id : null, payment: body.payment, total, tendered, voided: 0, void_ts: null, combos, discount });
-    rows.forEach(([it, qty], i) => {
-      DB.lines.push({ id: nid("line"), sale_id: sid, item_id: it.id, name: it.name, qty, price: it.price, cost: it.cost, disc: alloc[i] / 100 });
-      it.stock -= qty;
+    rows.forEach(([it, qty, price], i) => {
+      DB.lines.push({ id: nid("line"), sale_id: sid, item_id: it.id, name: it.name, qty, price, cost: it.cost, disc: alloc[i] / 100 });
+      if (!it.open_price) it.stock -= qty;
     });
     return { id: sid, total, discount, change: tendered !== null ? money(tendered - total) : 0 };
   }
@@ -206,7 +213,9 @@
     const sale = DB.sales.find(s => s.id === id) || bad("Sale not found");
     if (sale.voided) bad("That sale is already voided");
     for (const ln of DB.lines.filter(l => l.sale_id === id)) {
-      const it = itemById(ln.item_id); if (it) it.stock += ln.qty;
+      const it = itemById(ln.item_id);
+      if (!it || it.open_price) continue;
+      it.stock += ln.qty;
       DB.moves.push({ id: nid("move"), ts: nowStr(), item_id: ln.item_id, kind: "void", qty: ln.qty, amount: 0, note: `Voided sale #${id}`, event_id: sale.event_id });
     }
     sale.voided = 1; sale.void_ts = nowStr();
@@ -224,7 +233,7 @@
     return rows.slice(0, Math.min(parseInt(q.limit || 200, 10), 1000)).map(s => {
       const ls = lbs.get(s.id) || [];
       return { ...s, combos: s.combos || 0, discount: s.discount || 0, event_name: s.event_id !== null ? evName.get(s.event_id) || null : null,
-        lines: ls.map(l => ({ name: l.name, qty: l.qty, price: l.price, cost: l.cost, disc: l.disc || 0 })), cogs: round(ls.reduce((a, l) => a + l.qty * l.cost, 0), 2) };
+        lines: ls.map(l => ({ item_id: l.item_id, name: l.name, qty: l.qty, price: l.price, cost: l.cost, disc: l.disc || 0 })), cogs: round(ls.reduce((a, l) => a + l.qty * l.cost, 0), 2) };
     });
   }
 
@@ -333,18 +342,23 @@
     const inRange = ts => { const d = ts.slice(0, 10); return d >= frm && d <= to; };
     const sales = DB.sales.filter(s => !s.voided && inRange(s.ts) && (evId === null || s.event_id === evId));
     const lbs = linesBySale(), evById = new Map(DB.events.map(e => [e.id, e]));
+    const openIds = new Set(DB.items.filter(i => i.open_price).map(i => i.id));
     const cogsOf = s => (lbs.get(s.id) || []).reduce((a, l) => a + l.qty * l.cost, 0);
 
     const revenue = money(sales.reduce((a, s) => a + s.total, 0));
     let cost = 0, units = 0;
-    for (const s of sales) for (const l of lbs.get(s.id) || []) { cost += l.qty * l.cost; units += l.qty; }
+    let donations = 0, donationCount = 0;
+    for (const s of sales) for (const l of lbs.get(s.id) || []) {
+      cost += l.qty * l.cost;
+      if (openIds.has(l.item_id)) { donations += l.qty * l.price - (l.disc || 0); donationCount += 1; } else units += l.qty;
+    }
     cost = money(cost);
     const txns = sales.length, gross = money(revenue - cost);
     const moves = DB.moves.filter(m => inRange(m.ts) && (evId === null || m.event_id === evId));
     const writeoffs = money(moves.filter(m => m.kind === "waste" || m.kind === "count").reduce((a, m) => a + m.amount, 0));
     const purchases = money(moves.filter(m => m.kind === "purchase").reduce((a, m) => a + m.amount, 0));
     const totals = { revenue, cogs: cost, gross_profit: gross, margin: revenue ? round(gross / revenue * 100, 1) : 0, transactions: txns, units,
-      avg_sale: txns ? money(revenue / txns) : 0, discounts: money(sales.reduce((a, s) => a + (s.discount || 0), 0)), combos: sales.reduce((a, s) => a + (s.combos || 0), 0), writeoffs, net_profit: money(gross - writeoffs), purchases, cash_result: money(revenue - purchases) };
+      avg_sale: txns ? money(revenue / txns) : 0, discounts: money(sales.reduce((a, s) => a + (s.discount || 0), 0)), combos: sales.reduce((a, s) => a + (s.combos || 0), 0), donations: money(donations), donation_count: donationCount, writeoffs, net_profit: money(gross - writeoffs), purchases, cash_result: money(revenue - purchases) };
 
     const group = (keyFn) => { const m = new Map(); for (const s of sales) { const k = keyFn(s); if (!m.has(k)) m.set(k, []); m.get(k).push(s); } return m; };
     const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
@@ -364,6 +378,7 @@
       const key = s.event_id !== null ? "e" + s.event_id : "d" + day;
       sessions.set(key, { date: e ? e.date : day, label: e ? e.name : day });
       for (const l of lbs.get(s.id) || []) {
+        if (openIds.has(l.item_id)) continue;
         if (!series.has(l.item_id)) series.set(l.item_id, new Map());
         const sm = series.get(l.item_id); sm.set(key, (sm.get(key) || 0) + l.qty);
         sessTotal.set(key, (sessTotal.get(key) || 0) + l.qty);
@@ -373,7 +388,7 @@
     }
     const order = [...sessions.keys()].sort((a, b) => cmp(sessions.get(a).date, sessions.get(b).date) || cmp(a, b));
     const items = [];
-    for (const it of DB.items.slice().sort((a, b) => cmp(a.name, b.name))) {
+    for (const it of DB.items.filter(i => !i.open_price).sort((a, b) => cmp(a.name, b.name))) {
       const s = sold.get(it.id);
       if (!s && !it.active) continue;
       const u = s ? s.units : 0, rev = s ? money(s.revenue) : 0, profit = s ? money(s.revenue - s.cogs) : 0;
@@ -412,8 +427,8 @@
           return [l.sale_id, s.ts, evName.get(s.event_id) || "", s.payment, l.name, l.qty, l.price, l.cost, r4(l.qty * l.price), l.disc || 0, r4(l.qty * l.price - (l.disc || 0) - l.qty * l.cost), s.voided]; }));
     }
     if (kind === "inventory") {
-      return csv(["item", "category", "price", "unit_cost", "profit_per_unit", "on_hand", "reorder_at", "stock_value", "active"],
-        DB.items.slice().sort((a, b) => cmp(a.category, b.category) || cmp(a.name, b.name)).map(i => [i.name, i.category, i.price, i.cost, r4(i.price - i.cost), i.stock, i.reorder_level, r4(i.stock * i.cost), i.active]));
+      return csv(["item", "category", "price", "unit_cost", "profit_per_unit", "on_hand", "reorder_at", "stock_value", "active", "open_price"],
+        DB.items.slice().sort((a, b) => cmp(a.category, b.category) || cmp(a.name, b.name)).map(i => [i.name, i.category, i.price, i.cost, r4(i.price - i.cost), i.stock, i.reorder_level, r4(i.stock * i.cost), i.active, i.open_price || 0]));
     }
     if (kind === "moves") {
       return csv(["time", "item", "type", "qty_change", "amount", "note"], DB.moves.map(m => [m.ts, itemName.get(m.item_id), m.kind, m.qty, m.amount, m.note]));
@@ -495,6 +510,7 @@
     else if (p === "sample-menu") {
       if (DB.items.length) bad("The menu is not empty");
       SAMPLE_MENU.forEach(([name, category, price, cost, stock, reorder_level]) => createItem({ name, category, price, cost, stock, reorder_level }));
+      createItem({ name: "Donation", category: "Other", open_price: 1 });
     }
     else if (p === "sales") r = createSale(body);
     else if (parts[0] === "sales" && parts[2] === "void") voidSale(id);
