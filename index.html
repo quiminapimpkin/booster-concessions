@@ -187,6 +187,22 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
 .bar-mini { height: 8px; border-radius: 4px; background: var(--s1); }
 .empty { text-align: center; padding: 40px 16px; color: var(--ink2); }
 .empty .btn { margin: 6px; }
+#adminhot { position: fixed; right: 0; bottom: 0; width: 68px; height: 68px; z-index: 45; background: none; border: 0; cursor: pointer; display: grid; place-items: center; padding: 0; }
+#adminhot i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--muted); opacity: .22; }
+.adminbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 12px; padding: 8px 12px; margin-bottom: 14px; }
+.adminbar[hidden] { display: none; }
+.pinbox { padding: 22px; display: grid; gap: 12px; }
+.pinbox .btn { width: 100%; }
+.pindots { display: flex; gap: 14px; justify-content: center; margin: 4px 0; }
+.pindots i { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--muted); }
+.pindots i.on { background: var(--accent); border-color: var(--accent); }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.keypad button { height: 62px; border-radius: 14px; border: 1px solid var(--line); background: var(--tile); font-size: 26px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.keypad button:active { background: var(--accent-soft); }
+.keypad button.aux { font-size: 16px; background: transparent; }
+.reccode { font: 700 32px/1.2 ui-monospace, Menlo, monospace; letter-spacing: 3px; text-align: center; padding: 14px; border: 2px dashed var(--accent); border-radius: 12px; user-select: all; }
+@keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+.shake { animation: shake .35s; }
 #toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 12px; display: none; z-index: 120; font-weight: 600; max-width: 92vw; text-align: center; }
 
 @media (max-width: 960px) { .reg { grid-template-columns: 1fr 320px; } }
@@ -217,15 +233,14 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
   </div>
   <nav role="tablist" id="nav">
     <button role="tab" data-tab="register" aria-selected="true">Register</button>
-    <button role="tab" data-tab="till" aria-selected="false">Till</button>
     <button role="tab" data-tab="inventory" aria-selected="false">Inventory</button>
     <button role="tab" data-tab="sales" aria-selected="false">Sales</button>
-    <button role="tab" data-tab="reports" aria-selected="false">Reports</button>
-    <button role="tab" data-tab="data" aria-selected="false">Data &amp; Help</button>
   </nav>
 </header>
 
 <main>
+  <div class="adminbar" id="adminbar" hidden><span><b>Admin area</b> <span class="muted small">locks after 5 minutes idle</span></span><span class="spacer"></span>
+    <button class="btn sm" id="adminbar-menu">Admin menu</button><button class="btn sm danger" id="adminbar-lock">Lock &amp; exit</button></div>
   <!-- REGISTER -->
   <section id="register">
     <div id="noevent"></div>
@@ -243,8 +258,8 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
         <div class="total"><span>Total</span><span class="num" id="total">$0.00</span></div>
         <div class="seg" id="pay">
           <button data-pay="cash" aria-pressed="true">Cash</button>
-          <button data-pay="card" aria-pressed="false">Card</button>
-          <button data-pay="other" aria-pressed="false">Other</button>
+          <button data-pay="card" aria-pressed="false">Card/Tap</button>
+          <button data-pay="other" aria-pressed="false">Venmo</button>
         </div>
         <div id="cashbox">
           <div class="tender" id="tender"></div>
@@ -349,18 +364,24 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
       </div>
       <p class="small muted" id="buildinfo" style="margin:10px 0 0"></p>
     </div>
+    <div class="card" style="margin-bottom:16px">
+      <h3>Admin menu &amp; PIN</h3>
+      <p class="small muted" style="margin:6px 0 0">Till, Reports and Data &amp; Help are hidden behind a 5-digit PIN. Tap the faint dot in the <b>bottom-right corner</b> of the screen to open the admin menu. It locks itself after 5 minutes of no use, or tap <b>Lock &amp; exit</b>.
+      You choose the PIN the first time and get a one-time <b>recovery code</b> to write down. It is the only way to reset a forgotten PIN. Change the PIN from the admin menu. Payment types show as Cash, Card/Tap and Venmo.</p>
+    </div>
     <div class="card">
       <h3>Game-day checklist</h3>
       <ol class="small" style="padding-left:18px;margin:8px 0 0;display:grid;gap:6px">
-        <li><b>Before:</b> tap the event pill at the top and start today’s event. Log anything you bought under <b>Inventory → Restock</b>. On the <b>Till</b> tab, count your starting change by bill and coin and tap Open till.</li>
-        <li><b>During:</b> tap items on the Register. With 3+ items, tap <b>Combo discount</b> for $1 off (once per 3 items). Pick Cash / Card / Other, and Complete sale. Made a mistake? <b>Undo last sale</b>.</li>
-        <li><b>After:</b> on the <b>Till</b> tab, count the drawer and Close till to see over/short and what to deposit. Then do a quick count of what’s left. Use <b>Inventory → Adjust → Count</b> where the number differs. Then tap the event pill and End event.</li>
+        <li><b>Before:</b> tap the event pill at the top and start today’s event. Log anything you bought under <b>Inventory → Restock</b>. Open the admin menu (see below) → <b>Till</b>, count your starting change by bill and coin and tap Open till.</li>
+        <li><b>During:</b> tap items on the Register. With 3+ items, tap <b>Combo discount</b> for $1 off (once per 3 items). Pick Cash / Card/Tap / Venmo, and Complete sale. Made a mistake? <b>Undo last sale</b>.</li>
+        <li><b>After:</b> in the admin menu → <b>Till</b>, count the drawer and Close till to see over/short and what to deposit. Then do a quick count of what’s left. Use <b>Inventory → Adjust → Count</b> where the number differs. Then tap the event pill and End event.</li>
       </ol>
     </div>
   </section>
 </main>
 
 <button class="mobilebar" id="mobilebar" hidden><span id="mbcount">0 items</span><span id="mbtotal">$0.00</span></button>
+<button id="adminhot" aria-label="Admin" title="Admin"><i></i></button>
 <div id="tip"></div>
 <div id="toast" role="status"></div>
 
@@ -408,6 +429,45 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
   <div class="err" id="adjust-err"></div>
   <div class="row"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save</button></div>
 </form></dialog>
+
+<dialog id="dlg-pin" style="width:min(340px,94vw)"><div class="pinbox">
+  <h2 id="pin-title">Enter PIN</h2>
+  <p class="small muted" id="pin-sub" style="margin:0"></p>
+  <div class="pindots" id="pin-dots" aria-live="polite"></div>
+  <div class="err" id="pin-err" style="text-align:center"></div>
+  <div class="keypad" id="pin-keys">
+    <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button>
+    <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button>
+    <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
+    <button type="button" data-k="cancel" class="aux">Cancel</button><button type="button" data-k="0">0</button><button type="button" data-k="del" class="aux" aria-label="Delete">⌫</button>
+  </div>
+  <button type="button" class="btn sm" id="pin-forgot" style="justify-self:center">Forgot PIN?</button>
+</div></dialog>
+
+<dialog id="dlg-recovery" data-nodismiss="1"><div class="pinbox">
+  <h2>Your recovery code</h2>
+  <p class="small muted" style="margin:0">Write this down and keep it somewhere safe, <b>not on this device</b>. If the PIN is ever forgotten, this code is the only way to set a new one. It is shown just once.</p>
+  <div class="reccode" id="rec-code"></div>
+  <button class="btn primary" id="rec-done">I wrote it down</button>
+</div></dialog>
+
+<dialog id="dlg-recover"><form id="f-recover" class="pinbox">
+  <h2>Reset PIN</h2>
+  <p class="small muted" style="margin:0">Enter the recovery code you wrote down when the PIN was created.</p>
+  <label>Recovery code<input id="rec-input" autocomplete="off" autocapitalize="characters" placeholder="ABCD-EFGH" style="font-size:22px;text-align:center;letter-spacing:2px"></label>
+  <div class="err" id="rec-err"></div>
+  <div class="row"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Continue</button></div>
+</form></dialog>
+
+<dialog id="dlg-admin" style="width:min(360px,94vw)"><div class="pinbox">
+  <h2>Admin</h2>
+  <button class="btn primary" data-go="till">💵 Till</button>
+  <button class="btn primary" data-go="reports">📊 Reports</button>
+  <button class="btn primary" data-go="data">⚙️ Data &amp; Help</button>
+  <button class="btn" id="admin-changepin">Change PIN</button>
+  <button class="btn danger" id="admin-lock">Lock now</button>
+  <button class="btn" data-close>Close</button>
+</div></dialog>
 
 <dialog id="dlg-amount"><form id="f-amount">
   <h2 id="amount-title">Donation</h2>
@@ -477,6 +537,9 @@ let openSeq = 0;
 let payMethod = "cash";
 let combos = 0;               // $1-off combo discounts applied to the current order (any 3 items = 1 combo)
 const COMBO_OFF = 1;
+// Display names for payment types. The stored values stay cash / card / other, so history and exports are unchanged.
+const PAY_LABELS = { cash: "Cash", card: "Card/Tap", other: "Venmo" };
+const payLabel = p => PAY_LABELS[p] || p;
 let catFilter = "All";
 let lastSaleId = null;
 let currentTab = "register";
@@ -506,7 +569,9 @@ async function refresh() {
 
 /* ---------- tabs ---------- */
 function showTab(name) {
+  if (PROTECTED.has(name) && !isUnlocked()) { requestUnlock().then(ok => { if (ok) showTab(name); }); return; }
   currentTab = name;
+  $("#adminbar").hidden = !PROTECTED.has(name);
   $$("#nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
   $$("main > section").forEach(s => s.hidden = s.id !== name);
   $("#mobilebar").hidden = !(name === "register" && !cartEmpty());
@@ -560,7 +625,8 @@ $("#f-event").addEventListener("submit", async e => {
   } catch (err) { $("#event-err").textContent = err.message; }
 });
 $$("dialog").forEach(d => {
-  d.addEventListener("click", e => { if (e.target === d) d.close(); });
+  d.addEventListener("click", e => { if (e.target === d && !d.dataset.nodismiss) d.close(); });
+  if (d.dataset.nodismiss) d.addEventListener("cancel", e => e.preventDefault());
   $$("[data-close]", d).forEach(b => b.onclick = () => d.close());
 });
 
@@ -806,7 +872,7 @@ async function loadSales() {
   if (!rows.length) { $("#salestable").innerHTML = `<tbody><tr><td class="empty">No sales yet.</td></tr></tbody>`; return; }
   $("#salestable").innerHTML = `<thead><tr><th>#</th><th>Time</th><th>Event</th><th>Items</th><th>Paid by</th><th class="r">Total</th><th class="r">Profit</th><th></th></tr></thead><tbody>` +
     rows.map(s => `<tr class="${s.voided ? "archived" : ""}"><td>${s.id}</td><td>${esc(s.ts.slice(5, 16).replace("-", "/"))}</td><td>${esc(s.event_name || "—")}</td>
-    <td style="white-space:normal;min-width:180px">${s.lines.map(l => { const it = S.items.find(i => i.id === l.item_id); return it && it.open_price ? `${esc(l.name)} ${money(l.price)}` : `${l.qty}× ${esc(l.name)}`; }).join(", ")}${s.combos ? ` <span class="badge">combo ×${s.combos} −${money(s.discount)}</span>` : ""}</td><td>${esc(s.payment)}</td>
+    <td style="white-space:normal;min-width:180px">${s.lines.map(l => { const it = S.items.find(i => i.id === l.item_id); return it && it.open_price ? `${esc(l.name)} ${money(l.price)}` : `${l.qty}× ${esc(l.name)}`; }).join(", ")}${s.combos ? ` <span class="badge">combo ×${s.combos} −${money(s.discount)}</span>` : ""}</td><td>${esc(payLabel(s.payment))}</td>
     <td class="r num">${money(s.total)}</td><td class="r num">${money(s.total - s.cogs)}</td>
     <td class="right">${s.voided ? '<span class="badge">voided</span>' : `<button class="btn sm danger" data-void="${s.id}">Void</button>`}</td></tr>`).join("") + `</tbody>`;
 }
@@ -912,7 +978,7 @@ function renderReport(R) {
   $("#tb-hour").innerHTML = miniTable(["Hour", "Sales", "Revenue"], hrs.map(h => [hlabel(h), (hmap[h] || { txns: 0 }).txns, money((hmap[h] || { revenue: 0 }).revenue)]));
   $("#pay-split").innerHTML = R.by_payment.map(p => {
     const share = p.revenue / T.revenue * 100;
-    return `<div class="row" style="margin:4px 0"><span style="width:56px;text-transform:capitalize">${esc(p.payment)}</span><div style="flex:1;background:var(--grid);border-radius:4px"><div class="bar-mini" style="width:${share}%"></div></div><span class="num small" style="width:120px;text-align:right">${money(p.revenue)} · ${Math.round(share)}%</span></div>`;
+    return `<div class="row" style="margin:4px 0"><span style="width:84px">${esc(payLabel(p.payment))}</span><div style="flex:1;background:var(--grid);border-radius:4px"><div class="bar-mini" style="width:${share}%"></div></div><span class="num small" style="width:120px;text-align:right">${money(p.revenue)} · ${Math.round(share)}%</span></div>`;
   }).join("");
   hbars($("#ch-items"), items.slice(0, 12));
   scatter($("#ch-scatter"), R);
@@ -1022,6 +1088,123 @@ document.addEventListener("pointermove", placeTip);
 document.addEventListener("pointerdown", placeTip);
 document.addEventListener("pointerleave", () => tip.style.display = "none");
 document.addEventListener("scroll", () => tip.style.display = "none", { passive: true });
+
+/* ---------- admin area: hidden corner button + 5-digit PIN ---------- */
+const PROTECTED = new Set(["till", "reports", "data"]);
+const IDLE_MS = 5 * 60 * 1000;
+let unlockedUntil = 0, failCount = 0, lockedOutUntil = 0;
+const isUnlocked = () => Date.now() < unlockedUntil;
+function unlock() { unlockedUntil = Date.now() + IDLE_MS; }
+function lockNow(msg) {
+  unlockedUntil = 0; if ($("#dlg-admin").open) $("#dlg-admin").close();
+  if (PROTECTED.has(currentTab)) showTab("register");
+  if (msg) toast(msg);
+}
+document.addEventListener("pointerdown", () => { if (isUnlocked()) unlock(); }, true);
+setInterval(() => { if (!isUnlocked() && PROTECTED.has(currentTab)) lockNow("Admin locked after 5 minutes idle"); }, 10000);
+
+// Show the keypad and resolve with 5 digits, "FORGOT", or null if cancelled.
+function askPin({ title, sub = "", error = "", forgot = false }) {
+  return new Promise(resolve => {
+    const d = $("#dlg-pin"); let val = "", finished = false;
+    $("#pin-title").textContent = title; $("#pin-sub").textContent = sub; $("#pin-err").textContent = error; $("#pin-forgot").hidden = !forgot;
+    const paint = () => { $("#pin-dots").innerHTML = [0, 1, 2, 3, 4].map(i => `<i class="${i < val.length ? "on" : ""}"></i>`).join(""); };
+    const end = v => { if (finished) return; finished = true; cleanup(); if (d.open) d.close(); resolve(v); };
+    const press = k => {
+      if (k === "cancel") return end(null);
+      if (k === "del") val = val.slice(0, -1); else if (val.length < 5) val += k;
+      $("#pin-err").textContent = ""; paint();
+      if (val.length === 5) setTimeout(() => end(val), 150);
+    };
+    const onKeys = e => { const b = e.target.closest("[data-k]"); if (b) press(b.dataset.k); };
+    const onKey = e => { if (/^\d$/.test(e.key)) press(e.key); else if (e.key === "Backspace") press("del"); };
+    const onForgot = () => end("FORGOT");
+    const onClose = () => end(null);
+    function cleanup() { $("#pin-keys").removeEventListener("click", onKeys); document.removeEventListener("keydown", onKey); $("#pin-forgot").removeEventListener("click", onForgot); d.removeEventListener("close", onClose); }
+    $("#pin-keys").addEventListener("click", onKeys); document.addEventListener("keydown", onKey); $("#pin-forgot").addEventListener("click", onForgot); d.addEventListener("close", onClose);
+    paint(); d.showModal();
+    if (error) { $("#pin-dots").classList.remove("shake"); void $("#pin-dots").offsetWidth; $("#pin-dots").classList.add("shake"); }
+  });
+}
+function showRecovery(code) {
+  return new Promise(resolve => {
+    $("#rec-code").textContent = code; const d = $("#dlg-recovery");
+    $("#rec-done").onclick = () => { d.close(); resolve(); };
+    d.showModal();
+  });
+}
+// Ask for a new 5-digit PIN twice; returns the PIN or null.
+async function askNewPin(title) {
+  let error = "";
+  for (;;) {
+    const a = await askPin({ title, sub: "Choose 5 digits", error }); if (a === null || a === "FORGOT") return null;
+    const b = await askPin({ title: "Confirm PIN", sub: "Enter the same 5 digits again" }); if (b === null || b === "FORGOT") return null;
+    if (a === b) return a;
+    error = "Those didn’t match. Try again.";
+  }
+}
+async function createPinFlow() {
+  const pin = await askNewPin("Create an admin PIN");
+  if (!pin) return false;
+  try { const r = await api("/api/pin/set", { pin }); await showRecovery(r.recovery); unlock(); return true; }
+  catch (err) { toast(err.message); return false; }
+}
+function askRecoveryCode() {
+  return new Promise(resolve => {
+    const d = $("#dlg-recover"), f = $("#f-recover"); f.reset(); $("#rec-err").textContent = ""; let done = false;
+    const finish = v => { if (done) return; done = true; f.removeEventListener("submit", onSub); d.removeEventListener("close", onClose); if (d.open) d.close(); resolve(v); };
+    const onSub = e => { e.preventDefault(); const v = $("#rec-input").value.trim(); if (!v) { $("#rec-err").textContent = "Enter the code."; return; } finish(v); };
+    const onClose = () => finish(null);
+    f.addEventListener("submit", onSub); d.addEventListener("close", onClose); d.showModal(); setTimeout(() => $("#rec-input").focus(), 60);
+  });
+}
+async function recoverFlow() {
+  const code = await askRecoveryCode(); if (!code) return false;
+  try { await api("/api/pin/verify", { recovery: code }); } catch (err) { toast(err.message, 5000); return false; }   // check the code before asking for a new PIN
+  const pin = await askNewPin("Choose a new PIN"); if (!pin) return false;
+  try { const r = await api("/api/pin/recover", { recovery: code, pin }); await showRecovery(r.recovery); unlock(); return true; }
+  catch (err) { toast(err.message, 5000); return false; }
+}
+let unlocking = null;
+async function runUnlock() {
+  try {
+    const st = await api("/api/pin");
+    if (!st.set) return await createPinFlow();
+    let error = "";
+    for (;;) {
+      const wait = Math.ceil((lockedOutUntil - Date.now()) / 1000);
+      if (wait > 0) { toast(`Too many wrong tries. Wait ${wait} seconds.`); return false; }
+      const pin = await askPin({ title: "Enter PIN", sub: "Admin area", error, forgot: true });
+      if (pin === null) return false;
+      if (pin === "FORGOT") return await recoverFlow();
+      try { await api("/api/pin/verify", { pin }); failCount = 0; unlock(); return true; }
+      catch (err) { failCount++; error = "That PIN isn’t right."; if (failCount >= 5) { failCount = 0; lockedOutUntil = Date.now() + 30000; } }
+    }
+  } catch (err) { toast(err.message); return false; }
+}
+function requestUnlock() {
+  if (isUnlocked()) return Promise.resolve(true);
+  if (!unlocking) unlocking = runUnlock().finally(() => { unlocking = null; });   // .finally runs after the assignment, so a stale promise can never stick
+  return unlocking;
+}
+async function openAdminMenu() { if ((await requestUnlock()) && isUnlocked()) $("#dlg-admin").showModal(); }
+$("#adminhot").onclick = openAdminMenu;
+$("#adminbar-menu").onclick = () => $("#dlg-admin").showModal();
+$("#adminbar-lock").onclick = () => lockNow("Locked");
+$("#admin-lock").onclick = () => lockNow("Locked");
+$("#dlg-admin").addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) { $("#dlg-admin").close(); showTab(b.dataset.go); } });
+$("#admin-changepin").onclick = async () => {
+  $("#dlg-admin").close();
+  let error = "";
+  for (;;) {
+    const cur = await askPin({ title: "Current PIN", error }); if (cur === null || cur === "FORGOT") return;
+    try { await api("/api/pin/verify", { pin: cur }); } catch (err) { error = "That PIN isn’t right."; continue; }
+    const pin = await askNewPin("Choose a new PIN"); if (!pin) return;
+    try { const r = await api("/api/pin/set", { pin, current: cur }); await showRecovery(r.recovery); toast("PIN changed. The old recovery code no longer works."); }
+    catch (err) { toast(err.message); }
+    return;
+  }
+};
 
 /* ---------- till ---------- */
 const DENOMS = [["10000", "$100 bills", 100], ["5000", "$50 bills", 50], ["2000", "$20 bills", 20], ["1000", "$10 bills", 10], ["500", "$5 bills", 5], ["100", "$1 bills", 1],
@@ -1146,7 +1329,7 @@ if (LOCAL) {
 (async function () {
   try { await refresh(); } catch (e) { toast(e.message, 8000); }
   const h = location.hash.slice(1);
-  if (["register", "till", "inventory", "sales", "reports", "data"].includes(h)) showTab(h);
+  if (["register", "inventory", "sales"].includes(h)) showTab(h);   // Till / Reports / Data need the PIN, so a bookmark can't skip it
 })();
 </script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});</script>

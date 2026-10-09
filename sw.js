@@ -1,5 +1,5 @@
 /* Offline cache for the iPad build. Versioned: a new build installs a new cache and replaces the old one. */
-const CACHE = "bc-2026.10.04-1953";
+const CACHE = "bc-2026.10.09-0639";
 const ASSETS = ["./", "index.html", "engine.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "demo.json"];
 
 self.addEventListener("install", e => {

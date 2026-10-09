@@ -4,7 +4,7 @@
  */
 "use strict";
 (function () {
-  const BUILD = "2026.10.04-1953";
+  const BUILD = "2026.10.09-0639";
   const PAYMENTS = ["cash", "card", "other"];
   const SAMPLE_MENU = [
     ["Hot Dog", "Food", 3.0, 0.85, 0, 20], ["Nachos", "Food", 3.5, 1.05, 0, 15], ["Pretzel", "Food", 3.0, 0.9, 0, 10],
@@ -251,6 +251,43 @@
     DB.events.forEach(e => e.active = e.id === id ? 1 : 0);
   }
 
+  /* ---------------- admin PIN (gates Till / Reports / Data in the UI; kept on this device only) ---------------- */
+  const RECOVERY_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+  const randBytes = n => { const a = new Uint8Array(n); if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(a); else a.forEach((_, i) => a[i] = Math.floor(Math.random() * 256)); return a; };
+  async function hashSecret(secret, salt) {
+    try {
+      const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), "PBKDF2", false, ["deriveBits"]);
+      return hex(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: new TextEncoder().encode(salt), iterations: 60000 }, key, 256));
+    } catch (e) { // not a secure context: weaker fallback, still not stored in the clear
+      let h = 5381; const str = salt + ":" + secret;
+      for (let k = 0; k < 2000; k++) for (let i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0;
+      return "x" + h.toString(16);
+    }
+  }
+  async function makeSecret(secret) { const salt = hex(randBytes(8)); return salt + "$" + (await hashSecret(secret, salt)); }
+  async function secretOk(secret, stored) {
+    if (!stored) return false;
+    const [salt, h] = stored.split("$");
+    return (await hashSecret(secret, salt)) === h;
+  }
+  function cleanPin(body) { const pin = String(body.pin ?? "").trim(); if (!/^\d{5}$/.test(pin)) bad("The PIN must be 5 digits"); return pin; }
+  async function installPin(pin) {
+    const code = [...randBytes(8)].map(b => RECOVERY_CHARS[b % RECOVERY_CHARS.length]).join("");
+    DB.meta.pin = await makeSecret(pin); DB.meta.recovery = await makeSecret(code);
+    return { recovery: code.slice(0, 4) + "-" + code.slice(4) };
+  }
+  async function pinSet(body) {
+    const pin = cleanPin(body);
+    if (DB.meta.pin && !(await secretOk(String(body.current ?? "").trim(), DB.meta.pin))) bad("Enter the current PIN first");
+    return installPin(pin);
+  }
+  async function pinRecover(body) {
+    const pin = cleanPin(body);
+    if (!(await secretOk(String(body.recovery ?? "").toUpperCase().replace(/[^A-Z0-9]/g, ""), DB.meta.recovery))) bad("That recovery code is not right");
+    return installPin(pin);
+  }
+
   /* ---------------- cash till ---------------- */
   const DENOMS = ["10000", "5000", "2000", "1000", "500", "100", "25", "10", "5", "1"]; // cents per bill/coin
   const FAR_FUTURE = "9999-12-31 23:59:59";
@@ -456,7 +493,7 @@
     await ready;
     const stamp = todayStr();
     if (kind === "backup") {
-      const ok = await saveFile(`concessions-backup-${stamp}.json`, "application/json", JSON.stringify({ ...DB, exported: nowStr() }));
+      const ok = await saveFile(`concessions-backup-${stamp}.json`, "application/json", JSON.stringify({ ...DB, meta: { lastBackup: DB.meta.lastBackup }, exported: nowStr() }));
       if (ok) { DB.meta.lastBackup = nowStr(); await save(); }
       return ok;
     }
@@ -485,6 +522,7 @@
       next.till_counts.forEach(c => c.ts = shiftDate(c.ts, days));
       next.till_moves.forEach(m => m.ts = shiftDate(m.ts, days));
     }
+    next.meta.pin = DB.meta.pin; next.meta.recovery = DB.meta.recovery; // a backup file never changes who can unlock this device
     DB = next; reseq();
   }
 
@@ -499,7 +537,13 @@
       if (p === "report") return report(q);
       if (p === "sales") return listSales(q);
       if (p === "till") return tillState();
+      if (p === "pin") return { set: !!DB.meta.pin };
       bad("Not found");
+    }
+    if (p === "pin/verify") {
+      if ("recovery" in body) { if (!(await secretOk(String(body.recovery ?? "").toUpperCase().replace(/[^A-Z0-9]/g, ""), DB.meta.recovery))) bad("That recovery code is not right"); return { ok: true }; }
+      if (!(await secretOk(String(body.pin ?? "").trim(), DB.meta.pin))) bad("That PIN is not right");
+      return { ok: true };
     }
     let r = { ok: true };
     const id = parseInt(parts[1], 10);
@@ -521,12 +565,14 @@
     else if (p === "events") r = { id: createEvent(body) };
     else if (parts[0] === "events" && parts[2] === "activate") activateEvent(id);
     else if (p === "events/end") DB.events.forEach(e => e.active = 0);
+    else if (p === "pin/set") r = await pinSet(body);
+    else if (p === "pin/recover") r = await pinRecover(body);
     else if (p === "local/restore") restoreFrom(body.json, false);
     else if (p === "local/demo") {
       const res = await fetch("demo.json"); if (!res.ok) bad("Demo data isn't available offline yet. Connect once and try again.");
       restoreFrom(await res.text(), true);
     }
-    else if (p === "local/erase") { DB = emptyDB(); reseq(); }
+    else if (p === "local/erase") { const keep = DB.meta; DB = emptyDB(); DB.meta.pin = keep.pin; DB.meta.recovery = keep.recovery; reseq(); }
     else bad("Not found");
     await save();
     return r;
