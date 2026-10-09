@@ -4,7 +4,7 @@
  */
 "use strict";
 (function () {
-  const BUILD = "2026.10.09-0639";
+  const BUILD = "2026.10.09-0723";
   const PAYMENTS = ["cash", "card", "other"];
   const SAMPLE_MENU = [
     ["Hot Dog", "Food", 3.0, 0.85, 0, 20], ["Nachos", "Food", 3.5, 1.05, 0, 15], ["Pretzel", "Food", 3.0, 0.9, 0, 10],

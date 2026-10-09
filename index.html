@@ -430,7 +430,7 @@ details.tbl table { font-size: 13px; margin-top: 6px; }
   <div class="row"><span class="spacer"></span><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save</button></div>
 </form></dialog>
 
-<dialog id="dlg-pin" style="width:min(340px,94vw)"><div class="pinbox">
+<dialog id="dlg-pin" data-nodismiss="1" style="width:min(340px,94vw)"><div class="pinbox">
   <h2 id="pin-title">Enter PIN</h2>
   <p class="small muted" id="pin-sub" style="margin:0"></p>
   <div class="pindots" id="pin-dots" aria-live="polite"></div>
@@ -1119,9 +1119,12 @@ function askPin({ title, sub = "", error = "", forgot = false }) {
     const onKeys = e => { const b = e.target.closest("[data-k]"); if (b) press(b.dataset.k); };
     const onKey = e => { if (/^\d$/.test(e.key)) press(e.key); else if (e.key === "Backspace") press("del"); };
     const onForgot = () => end("FORGOT");
-    const onClose = () => end(null);
-    function cleanup() { $("#pin-keys").removeEventListener("click", onKeys); document.removeEventListener("keydown", onKey); $("#pin-forgot").removeEventListener("click", onForgot); d.removeEventListener("close", onClose); }
-    $("#pin-keys").addEventListener("click", onKeys); document.addEventListener("keydown", onKey); $("#pin-forgot").addEventListener("click", onForgot); d.addEventListener("close", onClose);
+    // Cancel is detected from explicit actions (Escape, tapping outside, the Cancel key) and NOT from the dialog's "close" event:
+    // browsers deliver that event a moment late, and Safari delivered it to the *next* keypad (e.g. Confirm PIN) and cancelled it.
+    const onCancel = e => { e.preventDefault(); end(null); };
+    const onBackdrop = e => { if (e.target === d) end(null); };
+    function cleanup() { $("#pin-keys").removeEventListener("click", onKeys); document.removeEventListener("keydown", onKey); $("#pin-forgot").removeEventListener("click", onForgot); d.removeEventListener("cancel", onCancel); d.removeEventListener("click", onBackdrop); }
+    $("#pin-keys").addEventListener("click", onKeys); document.addEventListener("keydown", onKey); $("#pin-forgot").addEventListener("click", onForgot); d.addEventListener("cancel", onCancel); d.addEventListener("click", onBackdrop);
     paint(); d.showModal();
     if (error) { $("#pin-dots").classList.remove("shake"); void $("#pin-dots").offsetWidth; $("#pin-dots").classList.add("shake"); }
   });
@@ -1154,7 +1157,7 @@ function askRecoveryCode() {
     const d = $("#dlg-recover"), f = $("#f-recover"); f.reset(); $("#rec-err").textContent = ""; let done = false;
     const finish = v => { if (done) return; done = true; f.removeEventListener("submit", onSub); d.removeEventListener("close", onClose); if (d.open) d.close(); resolve(v); };
     const onSub = e => { e.preventDefault(); const v = $("#rec-input").value.trim(); if (!v) { $("#rec-err").textContent = "Enter the code."; return; } finish(v); };
-    const onClose = () => finish(null);
+    const onClose = () => { if (!d.open) finish(null); };   // ignore a late "close" event that arrives after the dialog was reopened
     f.addEventListener("submit", onSub); d.addEventListener("close", onClose); d.showModal(); setTimeout(() => $("#rec-input").focus(), 60);
   });
 }
